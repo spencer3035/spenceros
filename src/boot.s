@@ -41,8 +41,8 @@ check_int13h_extensions:
 rust:
   # push disk number as argument
   push dx
-  call first_stage
-  push 'z'
+  call main
+  push 'Z'
   jmp call_fail
 
 # Top of stack should be error code
