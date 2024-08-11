@@ -1,15 +1,27 @@
 use std::path::Path;
 
-const BOOT_BYTES: &[u8] = include_bytes!(env!("BIOS_ENTRY"));
+const BOOT_ENTRY: &[u8] = include_bytes!(env!("BIOS_ENTRY"));
+const BOOT_PROTECTED: &[u8] = include_bytes!(env!("BIOS_PROTECTED"));
 const EXTRA_BYTES: [u8; 512 * 2] = [b'A'; 512 * 2];
 
 fn main() {
-    let mut disk_bytes: Vec<u8> = BOOT_BYTES
+    assert_eq!(
+        BOOT_ENTRY.len(),
+        512,
+        "boot entry point was not correct size"
+    );
+    assert_eq!(
+        BOOT_PROTECTED.len(),
+        512,
+        "boot protected was not correct size"
+    );
+
+    let disk_bytes: Vec<u8> = BOOT_ENTRY
         .iter()
+        .chain(BOOT_PROTECTED.iter())
         .chain(EXTRA_BYTES.iter())
         .cloned()
         .collect();
-    disk_bytes.push(b'z');
 
     let disk_image_file = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("target")

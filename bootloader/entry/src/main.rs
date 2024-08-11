@@ -11,6 +11,10 @@ pub mod debug;
 use debug::*;
 const SECTORS_TO_READ: u8 = 2;
 
+extern "C" {
+    static _second_stage_start: u8;
+}
+
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     fail(b"panic");
@@ -30,7 +34,10 @@ pub extern "C" fn main(drive_number: u16) {
 
     print_char(char_out_of_range as u8);
     //println(b"Done");
-    //print_dec(123);
+    unsafe {
+        print_dec(_second_stage_start.into());
+    }
+
     //println(b"\r\n");
     hlt();
 }
