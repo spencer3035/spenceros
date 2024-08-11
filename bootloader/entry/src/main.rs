@@ -10,13 +10,17 @@ use core::panic::PanicInfo;
 pub mod debug;
 use debug::*;
 
+const PANIC: u8 = b'P';
+const DISK_READ_ERROR: u8 = b'D';
+
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    fail(b'P');
+    fail_rs(PANIC);
 }
 
 #[no_mangle]
-pub extern "C" fn main(drive_number: u8) {
+pub extern "C" fn main(drive_number: u16) {
+    //print_dec(drive_number);
     //println(b"Reading");
     load_sector(drive_number);
     let char_out_of_range: u16;
@@ -28,52 +32,54 @@ pub extern "C" fn main(drive_number: u8) {
         );
     }
 
-    print_char(&(char_out_of_range as u8));
+    print_char(char_out_of_range as u8);
     //println(b"Done");
     //print_dec(123);
     //println(b"\r\n");
     hlt();
 }
 
-fn load_sector(drive_number: u8) {
+fn load_sector(drive_number: u16) {
+    //print_char(&b'j');
+    //print_dec(drive_number);
     let mut num_sectors: u8 = 1;
     let requested_sectors = num_sectors;
-    let mut to_address: u16 = 0x7e00;
+    let to_address: u16 = 0x7e00;
     let exit_status: u8;
 
     // TODO: Something is broken here
     unsafe {
         asm!(
-            "mov bx, {0:x}", // Address to load into
             "mov ah, 2", // 2 for reading disk to memory
-            "mov al, {2}", // Number of sectors to read
             "mov ch, 0", // Cylander number
-            "mov cl, 1", // Sector number
+            "mov cl, 2", // Sector number
             "mov dh, 0", // Head number
-            "mov dl, {1}", // Drive number
+            "push 'D'", // Push error code
             "int 0x13", // Perform read inturrupt
-            "mov dx, 0", // Put Carry flag into ax
-            "adc dx, 0",
-            "mov {0:x}, dx",
-            "mov {3}, ah",
-            inout(reg) to_address,
-            in(reg_byte) drive_number,
-            inout(reg_byte) num_sectors,
-            out(reg_byte) exit_status,
+            "jc fail", // Check success
+            "pop bx", // Push error code
+            in("bx") to_address,
+            in("dl") drive_number as u8,
+            inout("al") num_sectors,
+            out("ah") exit_status,
         )
     }
+    let read_sectors = num_sectors;
+
     // TODO: This is wrong, change it to ==
     //let disk_read_ok = to_address == 0;
     let disk_read_ok = exit_status == 0;
 
     if !disk_read_ok {
         print_dec(exit_status.into());
-        fail(b'd');
+        fail_rs(b'S');
     }
 
-    let read_sectors = num_sectors;
     if requested_sectors != read_sectors {
-        fail(b'r');
+        print_dec(requested_sectors.into());
+        print_char(b' ');
+        print_dec(read_sectors.into());
+        fail_rs(b'R');
     }
 }
 
@@ -83,9 +89,9 @@ fn load_sector(drive_number: u8) {
 #[cold]
 #[inline(never)]
 #[no_mangle]
-pub extern "C" fn fail(code: u8) -> ! {
+pub extern "C" fn fail_rs(code: u8) -> ! {
     print(b"Fail: ");
-    print_char(&code);
+    print_char(code);
     print(b"\r\n");
     hlt()
 }

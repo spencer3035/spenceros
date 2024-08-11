@@ -29,12 +29,12 @@ enable_a20:
 enable_a20_after:
 
 check_int13h_extensions:
-  push 'y'    # error code
+  push 'E'    # error code
   mov ah, 0x41
   mov bx, 0x55aa
   # dl contains drive number
   int 0x13
-  jc call_fail
+  jc fail
   # pop error code again
   pop ax
 
@@ -42,12 +42,17 @@ rust:
   # push disk number as argument
   push dx
   call main
+  # Fail code
   push 'Z'
-  jmp call_fail
 
 # Top of stack should be error code
-call_fail:
-  call fail
+fail:
+  mov ah, 0x0e
+  mov al, '!'
+  int 0x10
+  pop ax
+  mov ah, 0x0e
+  int 0x10
 
 spin:
   hlt
