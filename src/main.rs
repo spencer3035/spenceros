@@ -1,7 +1,7 @@
 use std::path::Path;
 
 const BOOT_BYTES: &[u8] = include_bytes!(env!("BIOS_ENTRY"));
-const EXTRA_BYTES: [u8; 512] = [b'A'; 512];
+const EXTRA_BYTES: [u8; 512 * 2] = [b'A'; 512 * 2];
 
 fn main() {
     let mut disk_bytes: Vec<u8> = BOOT_BYTES

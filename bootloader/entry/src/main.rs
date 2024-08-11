@@ -9,20 +9,16 @@ use core::panic::PanicInfo;
 
 pub mod debug;
 use debug::*;
-
-const PANIC: u8 = b'P';
-const DISK_READ_ERROR: u8 = b'D';
+const SECTORS_TO_READ: u8 = 2;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    fail_rs(PANIC);
+    fail(b"panic");
 }
 
 #[no_mangle]
 pub extern "C" fn main(drive_number: u16) {
-    //print_dec(drive_number);
-    //println(b"Reading");
-    load_sector(drive_number);
+    load_sectors(drive_number);
     let char_out_of_range: u16;
     unsafe {
         asm!(
@@ -39,10 +35,10 @@ pub extern "C" fn main(drive_number: u16) {
     hlt();
 }
 
-fn load_sector(drive_number: u16) {
+fn load_sectors(drive_number: u16) {
     //print_char(&b'j');
     //print_dec(drive_number);
-    let mut num_sectors: u8 = 1;
+    let mut num_sectors: u8 = SECTORS_TO_READ;
     let requested_sectors = num_sectors;
     let to_address: u16 = 0x7e00;
     let exit_status: u8;
@@ -71,28 +67,24 @@ fn load_sector(drive_number: u16) {
     let disk_read_ok = exit_status == 0;
 
     if !disk_read_ok {
-        print_dec(exit_status.into());
-        fail_rs(b'S');
+        //print_dec(exit_status.into());
+        fail(b"disk read");
     }
 
     if requested_sectors != read_sectors {
-        print_dec(requested_sectors.into());
-        print_char(b' ');
-        print_dec(read_sectors.into());
-        fail_rs(b'R');
+        //print_dec(requested_sectors.into());
+        //print_char(b' ');
+        //print_dec(read_sectors.into());
+        fail(b"num sector mismatch");
     }
 }
 
 /// Prints '![char]' where [char] should be the top element on the stack when this is called
 ///
 /// Should not be called with jump commands from assembly. Will not work unless called
-#[cold]
-#[inline(never)]
-#[no_mangle]
-pub extern "C" fn fail_rs(code: u8) -> ! {
+fn fail(code: &[u8]) -> ! {
     print(b"Fail: ");
-    print_char(code);
-    print(b"\r\n");
+    println(code);
     hlt()
 }
 
