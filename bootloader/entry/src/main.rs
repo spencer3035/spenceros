@@ -12,6 +12,8 @@ use debug::*;
 const SECTORS_TO_READ: u8 = 2;
 
 extern "C" {
+    /// The address of this number is set in the link.ld file to be the first byte of the next
+    /// section. We can use the address of this to transmute it to a function pointer and call it.
     static _second_stage_start: u8;
 }
 
@@ -23,22 +25,11 @@ fn panic(_info: &PanicInfo) -> ! {
 #[no_mangle]
 pub extern "C" fn main(drive_number: u16) {
     load_sectors(drive_number);
-    let char_out_of_range: u16;
-    unsafe {
-        asm!(
-            "mov ax, [0x7e01]",
-            "mov {0:x}, ax",
-            out(reg) char_out_of_range
-        );
-    }
 
-    print_char(char_out_of_range as u8);
-    //println(b"Done");
-    unsafe {
-        print_dec(_second_stage_start.into());
-    }
-
-    //println(b"\r\n");
+    // Transmute the pointer to the beginning of the next stage to a function and call it.
+    let next_stage: extern "C" fn(disk_number: u16) =
+        unsafe { core::mem::transmute(&_second_stage_start as *const u8 as *const ()) };
+    next_stage(drive_number);
     hlt();
 }
 
