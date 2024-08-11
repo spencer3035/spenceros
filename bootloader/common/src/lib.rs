@@ -1,4 +1,14 @@
+#![no_std]
 use core::arch::asm;
+
+use core::panic::PanicInfo;
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    fail(b"panic");
+}
+
+/// Prints a single characetr to the screen
+#[inline]
 pub fn print_char(c: u8) {
     let ax = c as u16 | 0x0e00;
     unsafe {
@@ -9,6 +19,7 @@ pub fn print_char(c: u8) {
     }
 }
 
+/// Prints a decimal value to the screen
 pub fn print_dec(mut num: u16) {
     let mut num_digits = 0;
 
@@ -35,13 +46,35 @@ pub fn print_dec(mut num: u16) {
     }
 }
 
+/// Prints a slice of characters to screen with \c\r at the end
+#[inline]
 pub fn println(chars: &[u8]) {
     print(chars);
     print(b"\r\n");
 }
 
+/// Prints a slice of characters to screen in BIOS
 pub fn print(chars: &[u8]) {
     for val in chars.iter() {
         print_char(*val);
+    }
+}
+
+/// Prints '![char]' where [char] should be the top element on the stack when this is called
+///
+/// Should not be called with jump commands from assembly. Will not work unless called
+pub fn fail(code: &[u8]) -> ! {
+    print(b"Fail: ");
+    println(code);
+    hlt()
+}
+
+/// Displays "Halt." and Halts CPU
+pub fn hlt() -> ! {
+    println(b"Halt.");
+    loop {
+        unsafe {
+            asm!("hlt");
+        }
     }
 }

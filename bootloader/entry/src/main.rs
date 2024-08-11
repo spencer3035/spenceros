@@ -5,21 +5,14 @@ global_asm!(include_str!("boot.s"));
 
 use core::arch::asm;
 use core::arch::global_asm;
-use core::panic::PanicInfo;
 
-pub mod debug;
-use debug::*;
+use common::*;
 const SECTORS_TO_READ: u8 = 2;
 
 extern "C" {
     /// The address of this number is set in the link.ld file to be the first byte of the next
     /// section. We can use the address of this to transmute it to a function pointer and call it.
     static _second_stage_start: u8;
-}
-
-#[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    fail(b"panic");
 }
 
 #[no_mangle]
@@ -74,24 +67,5 @@ fn load_sectors(drive_number: u16) {
         //print_char(b' ');
         //print_dec(read_sectors.into());
         fail(b"num sector mismatch");
-    }
-}
-
-/// Prints '![char]' where [char] should be the top element on the stack when this is called
-///
-/// Should not be called with jump commands from assembly. Will not work unless called
-fn fail(code: &[u8]) -> ! {
-    print(b"Fail: ");
-    println(code);
-    hlt()
-}
-
-/// Halts CPU
-fn hlt() -> ! {
-    println(b"Halt.");
-    loop {
-        unsafe {
-            asm!("hlt");
-        }
     }
 }

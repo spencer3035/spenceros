@@ -9,7 +9,7 @@ edition = "2021"
 llvm-tools = "0.1.1"
 
 [workspace]
-members = ["bootloader/entry", "bootloader/real_mode"]
+members = [ "bootloader/common","bootloader/entry", "bootloader/real_mode"]
 
 [profile.dev]
 panic = "abort"
