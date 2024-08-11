@@ -1,7 +1,7 @@
 ENTRY(_start)
 
 SECTIONS {
-    . = 0x7c00 + 512;
+    . = 0x7c00 + 0x200;
 
     .start :
     {
@@ -29,11 +29,9 @@ SECTIONS {
         *(.eh_frame_hdr .eh_frame_hdr.*)
     }
 
-    . = ALIGN(512);
 
     _second_stage_end = .;
-
-    . = 0x8000 - 2;
+    . = 0x7c00 + 0x200 + 0x400 - 0x2;
     .end_marker :
     {
         SHORT(0xdead)

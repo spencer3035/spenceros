@@ -7,10 +7,15 @@ name = "common"
 version = "0.1.0"
 
 [[package]]
+name = "config"
+version = "0.1.0"
+
+[[package]]
 name = "entry"
 version = "0.1.0"
 dependencies = [
  "common",
+ "config",
 ]
 
 [[package]]
@@ -30,5 +35,6 @@ dependencies = [
 name = "spenceros2"
 version = "0.1.0"
 dependencies = [
+ "config",
  "llvm-tools",
 ]

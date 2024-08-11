@@ -2,7 +2,7 @@ use std::path::Path;
 
 const BOOT_ENTRY: &[u8] = include_bytes!(env!("BIOS_ENTRY"));
 const BOOT_PROTECTED: &[u8] = include_bytes!(env!("BIOS_PROTECTED"));
-const EXTRA_BYTES: [u8; 512 * 2] = [b'A'; 512 * 2];
+const EXTRA_BYTES: [u8; 512] = [0; 512];
 
 fn main() {
     assert_eq!(
@@ -12,7 +12,7 @@ fn main() {
     );
     assert_eq!(
         BOOT_PROTECTED.len(),
-        512,
+        512 * config::REAL_MODE_SECTIONS,
         "boot protected was not correct size"
     );
 
