@@ -5,6 +5,12 @@ edition = "2021"
 
 [dependencies]
 
+[build-dependencies]
+llvm-tools = "0.1.1"
+
+[workspace]
+members = ["bootloader/entry"]
+
 [profile.dev]
 panic = "abort"
 opt-level = "s"

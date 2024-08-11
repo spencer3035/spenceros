@@ -1,4 +1,4 @@
-BOOTLOADER_SRC:=./src/boot.s
+BOOTLOADER_SRC:=./bootloader/entry/src/boot.s
 TARGET_DIR:=./target
 TARGET:=${TARGET_DIR}/disk.img
 
