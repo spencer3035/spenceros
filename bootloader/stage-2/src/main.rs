@@ -6,16 +6,37 @@ use common::*;
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) -> ! {
+    clear_screen();
+
     let mut writer = Writer::default();
-    writer.print_string(b"We have finally done it");
-    writer.flush();
+    for ii in 0usize..25 {
+        writer.print_string(b"We have finally done it : ");
+        writer.print_hex(ii as u16);
+        writer.print_char(b'\n');
+    }
+
+    writer.print_string(b"here we go");
     loop {}
 }
 
+//impl core::fmt::Write for Writer {
+//    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+//    }
+//}
+
 const TEXT_ADDRESS: *mut u16 = 0xB8000 as *mut u16;
-const MAX_LINES: u16 = 25;
-const MAX_COLUMNS: u16 = 80;
-const BUFFER_SIZE: usize = (MAX_COLUMNS * MAX_LINES) as usize;
+const MAX_LINES: usize = 25;
+const MAX_COLUMNS: usize = 80;
+const BUFFER_SIZE: usize = MAX_LINES * MAX_COLUMNS;
+
+fn clear_screen() {
+    let value: u16 = (0x0f << 8) | b' ' as u16;
+    for ii in 0..BUFFER_SIZE {
+        unsafe {
+            TEXT_ADDRESS.add(ii).write(value);
+        }
+    }
+}
 
 #[allow(dead_code)]
 #[repr(u8)]
@@ -74,60 +95,61 @@ impl TextColor {
     }
 }
 
+#[derive(Default)]
 struct Writer {
     color: TextColor,
     index: usize,
-    buffer: [u16; BUFFER_SIZE],
 }
 
-impl Default for Writer {
-    fn default() -> Self {
-        Writer {
-            color: TextColor::default(),
-            index: 0,
-            buffer: [0; BUFFER_SIZE],
-        }
-    }
-}
-
-fn write_char_row_col_color(c: u8, row: u16, col: u16, color: &TextColor) {
+fn write_char_row_col_color(c: u8, row: usize, col: usize, color: &TextColor) {
     let value = color.get_u16(c);
     let offset = col + MAX_COLUMNS * row;
     unsafe {
-        TEXT_ADDRESS.add(offset as usize).write(value);
+        TEXT_ADDRESS.add(offset).write(value);
     }
 }
 
 impl Writer {
-    fn flush(&self) {
-        for ii in 0..BUFFER_SIZE {
-            unsafe {
-                TEXT_ADDRESS.add(ii).write(self.buffer[ii]);
-            }
-        }
-    }
+    /// Prints a single character to screen
     fn print_char(&mut self, c: u8) {
-        //write_char_row_col_color(c, self.row, self.col, &self.color);
         if c != b'\n' {
-            self.buffer[self.index] = self.color.get_u16(c);
+            let col = self.index % MAX_COLUMNS;
+            let line = self.index / MAX_COLUMNS;
+            write_char_row_col_color(c, line, col, &self.color);
             self.index += 1;
         } else {
-            self.index = self.index - (self.index % MAX_COLUMNS as usize) + MAX_COLUMNS as usize;
+            // Move to beginning of next line
+            self.index = self.index - (self.index % MAX_COLUMNS) + MAX_COLUMNS;
         }
 
         if self.index >= BUFFER_SIZE {
-            // TODO: Scroll
-            write_char_row_col_color(b'P', 0, 0, &TextColor::new(Color::Red, Color::White));
-            self.buffer.rotate_left(MAX_COLUMNS as usize);
-            for ii in 0..MAX_COLUMNS {
-                let ii: usize = ((MAX_LINES - 1) * MAX_COLUMNS + ii).into();
-                self.buffer[ii] = self.color.get_u16(b' ');
-            }
+            self.scroll();
         }
     }
 
+    /// Scrolls the lines up by one and sets cursor to beginning of last line
+    fn scroll(&mut self) {
+        self.index = MAX_COLUMNS * (MAX_LINES - 1);
+
+        for ii in 0..(BUFFER_SIZE - MAX_COLUMNS) {
+            unsafe {
+                TEXT_ADDRESS
+                    .add(ii)
+                    .write(TEXT_ADDRESS.add(ii + MAX_COLUMNS).read());
+            }
+        }
+
+        (0..MAX_COLUMNS)
+            .map(|x| x + BUFFER_SIZE - MAX_COLUMNS)
+            .for_each(|ii| unsafe {
+                TEXT_ADDRESS
+                    .add(ii)
+                    .write(TEXT_ADDRESS.add(ii + MAX_COLUMNS).read());
+            });
+    }
+
     fn print_string(&mut self, str: &[u8]) {
-        for (ii, c) in str.iter().enumerate() {
+        for c in str.iter() {
             self.print_char(*c);
         }
     }
@@ -141,7 +163,7 @@ impl Writer {
             let to_print = if high_hexit <= 9 {
                 high_hexit + b'0'
             } else {
-                high_hexit + b'a'
+                high_hexit - 10 + b'a'
             };
 
             val <<= 4;
