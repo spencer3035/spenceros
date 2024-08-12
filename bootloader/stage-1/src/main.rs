@@ -88,7 +88,7 @@ pub extern "C" fn _start(_disk_number: u16) {
             "pop {1}",
             "call {1}",
 
-            // enter endless loop in case third stage returns
+            // enter endless loop in case stage-2 returns
             "2:",
             "jmp 2b",
             out(reg) _,
