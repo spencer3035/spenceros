@@ -18,7 +18,7 @@ const GDT_START: *mut u8 = 0x100 as *mut u8;
 
 #[link_section = ".start"]
 #[no_mangle]
-pub extern "C" fn _start(_disk_number: u16) -> ! {
+pub extern "C" fn _start(_disk_number: u16) {
     println(b"Starting Real Mode");
 
     // TODO:
@@ -47,8 +47,51 @@ pub extern "C" fn _start(_disk_number: u16) -> ! {
             gdt_location = in(reg) GDT_POINTER
         );
     }
+    //unsafe {
+    //    asm!("mov ah, 0x0f", "mov al, 'f'", "mov [0xb8000], ax");
+    //}
 
+    // Perform long jump
+    unsafe {
+        let entry_point = 0x7c00 + 0x600;
+        let val = 69;
+        asm!(
+            // align the stack
+            "and esp, 0xffffff00",
+            // push arguments
+            "push {info:e}",
+            // push entry point address
+            "push {entry_point:e}",
+            info = in(reg) val as u32,
+            entry_point = in(reg) entry_point as u32,
+        );
+        asm!("ljmp $0x8, $2f", "2:", options(att_syntax));
+        //asm!("ljmp $0x0, $0x7c00 + 0x600", options(att_syntax));
+        //asm!("ljmp 0x0, 0x7c00 + 0x600", );
+        //
+        asm!(
+            ".code32",
+
+            // reload segment registers
+            "mov {0}, 0x10",
+            "mov ds, {0}",
+            "mov es, {0}",
+            "mov ss, {0}",
+
+            // jump to third stage
+            "pop {1}",
+            "call {1}",
+            //"jmp 0x8400",
+
+            // enter endless loop in case third stage returns
+            "2:",
+            "jmp 2b",
+            out(reg) _,
+            out(reg) _,
+        );
+    }
     loop {}
+
     //println(b"Done");
 
     //if has_long_mode() {

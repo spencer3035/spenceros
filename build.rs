@@ -3,12 +3,6 @@ use std::{
     process::Command,
 };
 
-/// Builds a binary artifact from a given repo
-fn build_artifact(local_path: &Path, out_dir: &Path) -> PathBuf {
-    println!("cargo:rerun-if-changed={}", local_path.display());
-    elf_to_bin(&build_elf(local_path, out_dir))
-}
-
 /// Converts cargo ELF artifacts to raw binary
 fn elf_to_bin(elf_file: &Path) -> PathBuf {
     assert!(
@@ -33,16 +27,25 @@ fn elf_to_bin(elf_file: &Path) -> PathBuf {
     bin_file
 }
 
+enum NBits {
+    Bits16,
+    Bits32,
+}
+
 /// Builds a 16 bit elf file from a cargo package
-fn build_elf(local_path: &Path, out_dir: &Path) -> PathBuf {
+fn build_elf(local_path: &Path, out_dir: &Path, bits: NBits) -> PathBuf {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cmd = Command::new(cargo);
+    let target = match bits {
+        NBits::Bits16 => "tuples/i386-bit16.json",
+        NBits::Bits32 => "tuples/i386-bit32.json",
+    };
     cmd.arg("install")
         .arg("--path")
         .arg(local_path)
         .arg("--locked")
         .arg("--target")
-        .arg("tuples/i386-bit16.json")
+        .arg(target)
         .arg("-Zbuild-std=core")
         .arg("-Zbuild-std-features=compiler-builtins-mem")
         .arg("--root")
@@ -56,27 +59,40 @@ fn build_elf(local_path: &Path, out_dir: &Path) -> PathBuf {
     out_dir.join("bin").join(local_path.file_name().unwrap())
 }
 
-fn build_entry(out_dir: &Path) -> PathBuf {
-    // Build ./bootloader/entry/
+fn build_stage_0(out_dir: &Path) -> PathBuf {
+    // Build ./bootloader/stage-0/
     let local_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("bootloader")
-        .join("entry");
-    build_artifact(&local_path, out_dir)
+        .join("stage-0");
+    println!("cargo:rerun-if-changed={}", local_path.display());
+    elf_to_bin(&build_elf(&local_path, out_dir, NBits::Bits16))
 }
 
-fn build_protected(out_dir: &Path) -> PathBuf {
-    // Build ./bootloader/real_mode/
+fn build_stage_1(out_dir: &Path) -> PathBuf {
+    // Build ./bootloader/stage-1/
     let local_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("bootloader")
-        .join("real_mode");
-    build_artifact(&local_path, out_dir)
+        .join("stage-1");
+    println!("cargo:rerun-if-changed={}", local_path.display());
+    elf_to_bin(&build_elf(&local_path, out_dir, NBits::Bits16))
+}
+
+fn build_stage_2(out_dir: &Path) -> PathBuf {
+    // Build ./bootloader/stage-2/
+    let local_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("bootloader")
+        .join("stage-2");
+    println!("cargo:rerun-if-changed={}", local_path.display());
+    elf_to_bin(&build_elf(&local_path, out_dir, NBits::Bits32))
 }
 
 fn main() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
-    let file = build_entry(&out_dir);
-    println!("cargo:rustc-env=BIOS_ENTRY={}", file.display());
-    let file = build_protected(&out_dir);
-    println!("cargo:rustc-env=BIOS_PROTECTED={}", file.display());
+    let file = build_stage_0(&out_dir);
+    println!("cargo:rustc-env=BIOS_STAGE0={}", file.display());
+    let file = build_stage_1(&out_dir);
+    println!("cargo:rustc-env=BIOS_STAGE1={}", file.display());
+    let file = build_stage_2(&out_dir);
+    println!("cargo:rustc-env=BIOS_STAGE2={}", file.display());
 }

@@ -10,7 +10,13 @@ config = { path = "./bootloader/config/" }
 llvm-tools = "0.1.1"
 
 [workspace]
-members = [ "bootloader/common", "bootloader/config","bootloader/entry", "bootloader/real_mode"]
+members = [ 
+  "bootloader/common", 
+  "bootloader/config",
+  "bootloader/stage-0", 
+  "bootloader/stage-1",
+  "bootloader/stage-2"
+  ]
 
 [profile.dev]
 panic = "abort"
