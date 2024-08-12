@@ -1,33 +1,67 @@
 #![no_std]
 #![no_main]
 
-use common::*;
+use core::arch::asm;
+use core::fmt::Write;
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+use core::panic::PanicInfo;
+
+macro_rules! print {
+    () => {};
+    ($($arg:tt)*) => {
+        write!(Writer::default(),$($arg)*).unwrap();
+    };
+}
+
+macro_rules! println {
+    () => {
+        print!("\n");
+    };
+    ($($arg:tt)*) => {{
+        print!($($arg)*);
+        print!("\n");
+    }};
+}
+
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    println!("Panic : {info}");
+    loop {
+        unsafe { asm!("hlt") }
+    }
+}
 
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) -> ! {
     clear_screen();
 
-    let mut writer = Writer::default();
     for ii in 0usize..25 {
-        writer.print_string(b"We have finally done it : ");
-        writer.print_hex(ii as u16);
-        writer.print_char(b'\n');
+        println!("bruh, we have finally done it {ii:x}");
     }
-
-    writer.print_string(b"here we go");
     loop {}
 }
 
-//impl core::fmt::Write for Writer {
-//    fn write_str(&mut self, s: &str) -> core::fmt::Result {
-//    }
-//}
+impl core::fmt::Write for Writer {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for c in s.chars() {
+            if c.is_ascii() {
+                self.print_char(c as u8);
+            } else {
+                self.print_char(b'?');
+            }
+        }
+
+        Ok(())
+    }
+}
 
 const TEXT_ADDRESS: *mut u16 = 0xB8000 as *mut u16;
 const MAX_LINES: usize = 25;
 const MAX_COLUMNS: usize = 80;
 const BUFFER_SIZE: usize = MAX_LINES * MAX_COLUMNS;
+static WRITE_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 fn clear_screen() {
     let value: u16 = (0x0f << 8) | b' ' as u16;
@@ -98,7 +132,6 @@ impl TextColor {
 #[derive(Default)]
 struct Writer {
     color: TextColor,
-    index: usize,
 }
 
 fn write_char_row_col_color(c: u8, row: usize, col: usize, color: &TextColor) {
@@ -110,27 +143,32 @@ fn write_char_row_col_color(c: u8, row: usize, col: usize, color: &TextColor) {
 }
 
 impl Writer {
+    fn new(color: TextColor) -> Self {
+        Writer { color }
+    }
     /// Prints a single character to screen
     fn print_char(&mut self, c: u8) {
+        let mut index = WRITE_INDEX.load(Ordering::Acquire);
         if c != b'\n' {
-            let col = self.index % MAX_COLUMNS;
-            let line = self.index / MAX_COLUMNS;
+            let col = index % MAX_COLUMNS;
+            let line = index / MAX_COLUMNS;
             write_char_row_col_color(c, line, col, &self.color);
-            self.index += 1;
+            index += 1;
         } else {
             // Move to beginning of next line
-            self.index = self.index - (self.index % MAX_COLUMNS) + MAX_COLUMNS;
+            index = index - (index % MAX_COLUMNS) + MAX_COLUMNS;
         }
 
-        if self.index >= BUFFER_SIZE {
+        if index >= BUFFER_SIZE {
             self.scroll();
+            index = MAX_COLUMNS * (MAX_LINES - 1);
         }
+
+        WRITE_INDEX.store(index, Ordering::Release);
     }
 
     /// Scrolls the lines up by one and sets cursor to beginning of last line
     fn scroll(&mut self) {
-        self.index = MAX_COLUMNS * (MAX_LINES - 1);
-
         for ii in 0..(BUFFER_SIZE - MAX_COLUMNS) {
             unsafe {
                 TEXT_ADDRESS
@@ -146,28 +184,5 @@ impl Writer {
                     .add(ii)
                     .write(TEXT_ADDRESS.add(ii + MAX_COLUMNS).read());
             });
-    }
-
-    fn print_string(&mut self, str: &[u8]) {
-        for c in str.iter() {
-            self.print_char(*c);
-        }
-    }
-
-    fn print_hex(&mut self, mut val: u16) {
-        let num_hexits = 4;
-        self.print_char(b'0');
-        self.print_char(b'x');
-        for _ in 0..num_hexits {
-            let high_hexit = ((val & 0xf000) >> 12) as u8;
-            let to_print = if high_hexit <= 9 {
-                high_hexit + b'0'
-            } else {
-                high_hexit - 10 + b'a'
-            };
-
-            val <<= 4;
-            self.print_char(to_print);
-        }
     }
 }

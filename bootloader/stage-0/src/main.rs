@@ -7,7 +7,7 @@ use core::arch::asm;
 use core::arch::global_asm;
 
 use common::*;
-const SECTORS_TO_READ: u8 = config::REAL_MODE_SECTIONS as u8 + 5;
+const SECTORS_TO_READ: u8 = config::STAGE_1_SECTIONS as u8 + config::STAGE_2_SECTIONS as u8;
 
 extern "C" {
     /// The address of this number is set in the link.ld file to be the first byte of the next
