@@ -65,10 +65,16 @@ pub extern "C" fn _start(_disk_number: u16) {
             info = in(reg) val as u32,
             entry_point = in(reg) entry_point as u32,
         );
-        asm!("ljmp $0x8, $2f", "2:", options(att_syntax));
-        //asm!("ljmp $0x0, $0x7c00 + 0x600", options(att_syntax));
-        //asm!("ljmp 0x0, 0x7c00 + 0x600", );
-        //
+        // What does this do? I Think it just does a "long jump" one line down.
+        asm!(
+            // Perform long jump to next address? How do we know this is sector 0x8?
+            // Also what is 2f? Should it be interpreted as 0x2f? Changing it to that breaks things
+            "ljmp $0x8, $2f",
+            // Label? How does this not conflict with below
+            "2:",
+            // Why do we need att_syntax?
+            options(att_syntax)
+        );
         asm!(
             ".code32",
 
@@ -78,10 +84,9 @@ pub extern "C" fn _start(_disk_number: u16) {
             "mov es, {0}",
             "mov ss, {0}",
 
-            // jump to third stage
+            // jump to stage-2
             "pop {1}",
             "call {1}",
-            //"jmp 0x8400",
 
             // enter endless loop in case third stage returns
             "2:",
