@@ -25,6 +25,18 @@ pub extern "C" fn _start(_disk_number: u16) -> ! {
     hlt();
 }
 
+fn setup_paging() {
+    // Zero out addresses used for paging
+    let starts = [PML4T_START, PDPT_START, PDT_START, PT_START];
+    for start in starts {
+        for ii in 0..0x1000 {
+            unsafe {
+                start.add(ii).write(0);
+            }
+        }
+    }
+}
+
 // Uses CPUID to check for long mode
 fn has_long_mode() -> bool {
     let eax: u32;
