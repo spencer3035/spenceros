@@ -1,20 +1,54 @@
 #![no_std]
 #![no_main]
 
-mod common;
-mod io;
-
-use common::hlt;
-use io::{clear_screen, print, println};
+use common::*;
+use core::arch::asm;
 
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) -> ! {
     clear_screen();
+    println!("Started protected mode");
 
-    for ii in 0usize..25 {
-        println!("bruh, we have finally done it {ii}");
+    // Note that CPUID functionality is checked in stage-1
+    if has_long_mode() {
+        println!("We have long mode");
+    } else {
+        println!("No long mode!");
+        hlt();
     }
-    print!("Some extra stuff");
+
+    // TODO:
+    // Set up paging
+    // Load/update gdt to have long mode
+    // Enter Long Mode
     hlt();
+}
+
+// Uses CPUID to check for long mode
+fn has_long_mode() -> bool {
+    let eax: u32;
+    unsafe {
+        asm!(
+            "mov eax, 0x80000000",
+            "cpuid",
+            out("eax") eax
+        );
+    }
+
+    if eax < 0x80000001 {
+        println!("No long mode feature");
+        return false;
+    }
+
+    let edx: u32;
+    unsafe {
+        asm!(
+            "mov eax, 0x80000001",
+            "cpuid",
+            out("edx") edx
+        );
+    }
+
+    edx & 1 << 29 != 0
 }

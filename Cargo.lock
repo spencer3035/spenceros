@@ -7,10 +7,6 @@ name = "common"
 version = "0.1.0"
 
 [[package]]
-name = "config"
-version = "0.1.0"
-
-[[package]]
 name = "llvm-tools"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -20,7 +16,7 @@ checksum = "955be5d0ca0465caf127165acb47964f911e2bc26073e865deb8be7189302faf"
 name = "spenceros"
 version = "0.1.0"
 dependencies = [
- "config",
+ "common",
  "llvm-tools",
 ]
 
@@ -29,7 +25,6 @@ name = "stage-0"
 version = "0.1.0"
 dependencies = [
  "common",
- "config",
 ]
 
 [[package]]
@@ -42,3 +37,6 @@ dependencies = [
 [[package]]
 name = "stage-2"
 version = "0.1.0"
+dependencies = [
+ "common",
+]

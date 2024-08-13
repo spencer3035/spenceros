@@ -3,29 +3,14 @@
 
 use core::arch::asm;
 
+use common::gdt::*;
 use common::*;
-pub mod gdt;
-use gdt::*;
-
-#[repr(packed)]
-struct GdtPointer {
-    size: u16,
-    location: u32,
-}
-
-const GDT_POINTER: *mut GdtPointer = 0x80 as *mut GdtPointer;
-const GDT_START: *mut u8 = 0x100 as *mut u8;
 
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
     println(b"Starting Real Mode");
 
-    // TODO:
-    // Check CPUID avaliable (for checking 64 bit mode)
-    // Check 64 bit mode avaliable
-    // Load GDT
-    // Enter Long Mode directly
     if has_cpuid() {
         println(b"Has CPUID");
     } else {
@@ -47,9 +32,6 @@ pub extern "C" fn _start(_disk_number: u16) {
             gdt_location = in(reg) GDT_POINTER
         );
     }
-    //unsafe {
-    //    asm!("mov ah, 0x0f", "mov al, 'f'", "mov [0xb8000], ax");
-    //}
 
     // Perform long jump
     unsafe {
@@ -143,34 +125,6 @@ fn write_protected_gdt() -> usize {
 
     offset
 }
-
-// Uses CPUID to check for long mode
-//fn has_long_mode() -> bool {
-//    let eax: u16;
-//    unsafe {
-//        asm!(
-//            "mov eax, 0x80000000",
-//            "cpuid",
-//            out("eax") eax
-//        );
-//    }
-//
-//    if eax < 0x80000001 {
-//        println(b"No long mode feature");
-//        return false;
-//    }
-//
-//    let edx: u16;
-//    unsafe {
-//        asm!(
-//            "mov eax, 0x80000001",
-//            "cpuid",
-//            out("edx") edx
-//        );
-//    }
-//
-//    edx & 1 << 29 != 0
-//}
 
 /// Checks if CPUID exists or not
 fn has_cpuid() -> bool {

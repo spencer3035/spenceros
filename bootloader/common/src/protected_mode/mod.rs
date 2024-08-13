@@ -1,6 +1,7 @@
 use crate::{print, println};
 use core::arch::asm;
 use core::panic::PanicInfo;
+
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     println!("{info}");
@@ -12,3 +13,5 @@ pub fn hlt() -> ! {
         unsafe { asm!("hlt") }
     }
 }
+
+pub mod io;

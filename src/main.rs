@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use config::{STAGE_1_SECTIONS, STAGE_2_SECTIONS};
+use common::{STAGE_1_SECTIONS, STAGE_2_SECTIONS};
 
 const BOOT_0: &[u8] = include_bytes!(env!("BIOS_STAGE0"));
 const BOOT_1: &[u8] = include_bytes!(env!("BIOS_STAGE1"));
@@ -20,13 +20,13 @@ fn main() {
     // Check section 1 is the correct size
     assert_eq!(
         BOOT_1.len(),
-        512 * config::STAGE_1_SECTIONS,
+        512 * STAGE_1_SECTIONS,
         "boot protected was not correct size"
     );
     // Check section 2 is the correct size
     assert_eq!(
         BOOT_2.len(),
-        512 * config::STAGE_2_SECTIONS,
+        512 * STAGE_2_SECTIONS,
         "boot protected was not correct size"
     );
 

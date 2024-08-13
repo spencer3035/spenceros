@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-config = { path = "./bootloader/config/" }
+common = { path = "./bootloader/common/" }
 
 [build-dependencies]
 llvm-tools = "0.1.1"
@@ -12,7 +12,6 @@ llvm-tools = "0.1.1"
 [workspace]
 members = [ 
   "bootloader/common", 
-  "bootloader/config",
   "bootloader/stage-0", 
   "bootloader/stage-1",
   "bootloader/stage-2"

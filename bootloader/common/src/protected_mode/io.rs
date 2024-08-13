@@ -1,14 +1,16 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+#[macro_export]
 macro_rules! print {
     () => {};
     ($($arg:tt)*) => {
         #[allow(unused_imports)]
         use ::core::fmt::Write as _;
-        write!($crate::io::Writer::default(),$($arg)*).unwrap();
+        write!($crate::protected_mode::io::Writer::default(),$($arg)*).unwrap();
     };
 }
 
+#[macro_export]
 macro_rules! println {
     () => {
         #[allow(unused_imports)]
@@ -22,8 +24,6 @@ macro_rules! println {
         print!("\n");
     };
 }
-
-pub(crate) use {print, println};
 
 impl core::fmt::Write for Writer {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
@@ -56,7 +56,7 @@ pub fn clear_screen() {
 
 #[allow(dead_code)]
 #[repr(u8)]
-enum Color {
+pub enum Color {
     Black = 0,
     Blue = 1,
     Green = 2,
@@ -82,7 +82,7 @@ impl Color {
     }
 }
 
-struct TextColor {
+pub struct TextColor {
     fg: Color,
     bg: Color,
 }
@@ -97,6 +97,13 @@ impl Default for TextColor {
 }
 
 impl TextColor {
+    /// Gets a new text color with given forground and background colors
+    pub fn new(foreground: Color, background: Color) -> Self {
+        TextColor {
+            fg: foreground,
+            bg: background,
+        }
+    }
     fn get_u16(&self, char: u8) -> u16 {
         (self.color() as u16) << 8 | (char as u16)
     }
