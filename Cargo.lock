@@ -17,7 +17,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "955be5d0ca0465caf127165acb47964f911e2bc26073e865deb8be7189302faf"
 
 [[package]]
-name = "spenceros2"
+name = "spenceros"
 version = "0.1.0"
 dependencies = [
  "config",
