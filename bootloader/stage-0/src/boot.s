@@ -2,7 +2,7 @@
 .global _start
 .code16
 
-# This stage initializes the stack, enables the A20 line
+# Initialize the stack and jump to rust
 _start:
   # Some BIOS' may load us at 0x0000:0x7C00 while other may load us at 0x07C0:0x0000.
   # Do a far jump to fix this issue, and reload CS to 0x0000.
@@ -23,41 +23,10 @@ _start:
   # initialize stack
   mov sp, 0x7c00
 
-enable_a20:
-  # enable A20-Line via IO-Port 92, might not work on all motherboards
-  in al, 0x92
-  test al, 2
-  jnz enable_a20_after
-  or al, 2
-  and al, 0xFE
-  out 0x92, al
-enable_a20_after:
-
-check_int13h_extensions:
-  push 'E'    # error code
-  mov ah, 0x41
-  mov bx, 0x55aa
-  # dl contains drive number
-  int 0x13
-  jc fail
-  # pop error code again
-  pop ax
-
 rust:
   # push disk number as argument
   push dx
   call main
-  # Fail code
-  push 'Z'
-
-# Top of stack should be error code
-fail:
-  mov ah, 0x0e
-  mov al, '!'
-  int 0x10
-  pop ax
-  mov ah, 0x0e
-  int 0x10
 
 spin:
   hlt

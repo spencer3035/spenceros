@@ -19,6 +19,20 @@ pub extern "C" fn _start(_disk_number: u16) -> ! {
     }
 
     println!("MEM:");
+    let esp: u32;
+    let ebp: u32;
+    unsafe {
+        asm!(
+        "mov {esp}, esp",
+        "mov {ebp}, ebp",
+        esp = out(reg) esp,
+        ebp = out(reg) ebp,
+        );
+    }
+
+    println!("sp = 0x{esp:x}");
+    println!("bp = 0x{ebp:x}");
+    loop {}
 
     // TODO: Set sp/bp and verify that the memory is set as expected. We could also just print the
     // sp/bp values...

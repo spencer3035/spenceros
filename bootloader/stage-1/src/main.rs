@@ -9,6 +9,9 @@ use common::*;
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
+    unsafe {
+        enable_a20();
+    }
     println(b"Starting Real Mode");
 
     if has_cpuid() {
@@ -88,6 +91,26 @@ pub extern "C" fn _start(_disk_number: u16) {
     //}
 
     //hlt();
+}
+
+#[inline(always)]
+unsafe fn enable_a20() {
+    // enable A20-Line via IO-Port 92, might not work on all motherboards
+    // Check if A20 is enabled
+    let al: u8;
+    asm!(
+        "in {al}, 0x92",
+        //"test al, 2",
+        al = out(reg_byte) al
+    );
+
+    if al != 2 {
+        //println(b"A20 already enabled");
+        return;
+    }
+
+    // Enable a20
+    asm!("or al, 2", "and al, 0xFE", "out 0x92, al",);
 }
 
 /// Writes GDT and retuns number of bytes written
