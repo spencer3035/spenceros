@@ -18,6 +18,38 @@ pub fn print_char(c: u8) {
     }
 }
 
+// Prints a value in hex, prepending 0x
+pub fn print_hex(mut num: u16) {
+    print_char(b'0');
+    print_char(b'x');
+    let mut num_hexits = 0;
+    loop {
+        let hexit = num & 0x0F;
+        unsafe {
+            asm!("push {0:x}", in(reg) hexit);
+        }
+        num_hexits += 1;
+        num = num >> 4;
+        if num == 0 {
+            break;
+        }
+    }
+
+    while num_hexits > 0 {
+        let hexit: i16;
+        unsafe {
+            asm!("pop {0:x}", out(reg) hexit);
+        }
+        let value = if hexit <= 9 {
+            hexit as u8 + b'0'
+        } else {
+            hexit as u8 - 10 + b'a'
+        };
+        print_char(value);
+        num_hexits -= 1;
+    }
+}
+
 /// Prints a decimal value to the screen
 pub fn print_dec(mut num: u16) {
     let mut num_digits = 0;
@@ -34,7 +66,7 @@ pub fn print_dec(mut num: u16) {
         }
     }
 
-    while num_digits >= 1 {
+    while num_digits > 0 {
         let digit: i16;
         unsafe {
             asm!("pop {0:x}", out(reg) digit);

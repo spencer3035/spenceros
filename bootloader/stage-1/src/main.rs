@@ -12,30 +12,51 @@ pub extern "C" fn _start(_disk_number: u16) {
     unsafe {
         enable_a20();
     }
-    println(b"Starting Real Mode");
 
-    if has_cpuid() {
-        println(b"Has CPUID");
-    } else {
-        println(b"Doesn't have CPUID");
-        hlt();
+    if !has_cpuid() {
+        fail(b"Doesn't have CPUID");
     }
 
-    println(b"Writing GDT");
-    write_protected_gdt();
-
-    // Setup protected mode
     unsafe {
-        asm!(
-            "cli", // Disable inturrupts
-            "lgdt [{gdt_location}]", // Load GDT
-            "mov eax, cr0", // Set protection enable bit
-            "or eax, 1",
-            "mov cr0, eax",
-            gdt_location = in(reg) GDT_POINTER
-        );
+        detect_memory();
     }
 
+    print_hex(0x321a);
+    unsafe {
+        write_protected_gdt();
+        load_gdt();
+        next_stage();
+    }
+
+    fail(b"return from protected");
+}
+
+unsafe fn detect_memory() {
+    let int15_ax = 0xE820;
+    let magic_number = 0x534d4150;
+    let mut mem_address: u16 = MEMORY_MAP_START as u16;
+    let magic_if_equal: u32;
+    asm!(
+        "mov eax, 0xE820",
+        "mov ebx, 0x0",
+        "mov edx, 0x534d4150",
+        "mov ecx, 24",
+        "int 0x15",
+        // If success:
+        // Carry is clear
+        // EBX is nonzero, should be preserved to next call
+        // CL has number of bytes stored (probably 20)
+        // If end:
+        // ebx == 0 or carry flag is set
+        inout("di") mem_address,
+        out("eax") magic_if_equal,
+    );
+
+    // Reference: https://wiki.osdev.org/Detecting_Memory_(x86)
+    // TODO: Increment di, reset eax and ecx, until ebx==0 or carry is set
+}
+
+unsafe fn next_stage() {
     // Perform long jump
     unsafe {
         let entry_point = 0x7c00 + 0x600;
@@ -80,17 +101,22 @@ pub extern "C" fn _start(_disk_number: u16) {
             out(reg) _,
         );
     }
-    loop {}
+}
 
-    //println(b"Done");
-
-    //if has_long_mode() {
-    //    println(b"Has long mode");
-    //} else {
-    //    println(b"Doesn't have long mode");
-    //}
-
-    //hlt();
+/// Disables inturrupts and loads GDT
+#[inline(always)]
+unsafe fn load_gdt() {
+    // Setup protected mode
+    unsafe {
+        asm!(
+            "cli", // Disable inturrupts
+            "lgdt [{gdt_location}]", // Load GDT
+            "mov eax, cr0", // Set protection enable bit
+            "or eax, 1",
+            "mov cr0, eax",
+            gdt_location = in(reg) GDT_POINTER
+        );
+    }
 }
 
 #[inline(always)]
@@ -114,7 +140,7 @@ unsafe fn enable_a20() {
 }
 
 /// Writes GDT and retuns number of bytes written
-fn write_protected_gdt() -> usize {
+unsafe fn write_protected_gdt() -> usize {
     let gdt_code = GdtEntry::new(0, u32::MAX, kernel_code_flags(), extra_flags_protected());
     let gdt_data = GdtEntry::new(0, u32::MAX, kernel_data_flags(), extra_flags_protected());
 

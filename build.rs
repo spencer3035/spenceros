@@ -89,6 +89,12 @@ fn build_stage_2(out_dir: &Path) -> PathBuf {
 fn main() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
+    // Build ./bootloader/common/
+    let common_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("bootloader")
+        .join("common");
+    println!("cargo:rerun-if-changed={}", common_path.display());
+
     let file = build_stage_0(&out_dir);
     println!("cargo:rustc-env=BIOS_STAGE0={}", file.display());
     let file = build_stage_1(&out_dir);

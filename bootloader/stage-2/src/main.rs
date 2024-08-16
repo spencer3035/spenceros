@@ -4,11 +4,41 @@
 use common::*;
 use core::arch::asm;
 
+#[repr(packed)]
+#[derive(Debug)]
+struct MemoryMapEntry {
+    base_address: u64,
+    length: u64,
+    region_type: u32,
+    attributes: u32,
+}
+
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) -> ! {
     clear_screen();
     println!("Started protected mode");
+
+    let mut mmap_reader: *const MemoryMapEntry = MEMORY_MAP_START as *const MemoryMapEntry;
+    unsafe {
+        let val = mmap_reader.read();
+        println!("{:#x?}", val);
+    }
+    unsafe {
+        let val = mmap_reader.add(1).read();
+        println!("{:#x?}", val);
+    }
+    //let mut mmap_reader: *const u32 = MEMORY_MAP_START as *const u32;
+    //unsafe {
+    //    let start_low = mmap_reader.read();
+    //    let start_high = mmap_reader.add(1).read();
+    //    println!("low  = {start_low:x}");
+    //    println!("high = {start_high:x}");
+    //    let start_low = mmap_reader.add(2).read();
+    //    let start_high = mmap_reader.add(3).read();
+    //    println!("low  = {start_low:x}");
+    //    println!("high = {start_high:x}");
+    //}
 
     // Note that CPUID functionality is checked in stage-1
     if has_long_mode() {
