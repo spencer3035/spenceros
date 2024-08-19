@@ -41,10 +41,11 @@ pub const PDT_START: *mut u8 = 0x3000 as *mut u8;
 /// Start of the PT, takes up 0x1000 bytes
 pub const PT_START: *mut u8 = 0x4000 as *mut u8;
 
-/// Start of the memory map
-pub const MEMORY_MAP_START: *mut u8 = 0x5000 as *mut u8;
-
 /// Location of the GDT pointer, contains a u16 and u32, so 6 bytes
-pub const GDT_POINTER: *mut GdtPointer = 0x80 as *mut GdtPointer;
+pub const GDT_POINTER: *mut GdtPointer = 0x5000 as *mut GdtPointer;
 /// Location of the GDT, size depends on how many tables
-pub const GDT_START: *mut u8 = 0x100 as *mut u8;
+pub const GDT_START: *mut u8 = 0x5006 as *mut u8;
+
+/// Start of the memory map, each entry is 24 bytes, number of entries is not known at runtime, but
+/// in the emulator it is 7 entries which would be 7*24=168 bytes
+pub const MEMORY_MAP_START: *mut u8 = 0x6000 as *mut u8;
