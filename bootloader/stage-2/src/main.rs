@@ -15,18 +15,17 @@ struct MemoryMapEntry {
 
 #[link_section = ".start"]
 #[no_mangle]
-pub extern "C" fn _start(_disk_number: u16) -> ! {
+pub extern "C" fn _start(count: u16) -> ! {
     clear_screen();
     println!("Started protected mode");
 
     let mut mmap_reader: *const MemoryMapEntry = MEMORY_MAP_START as *const MemoryMapEntry;
-    unsafe {
-        let val = mmap_reader.read();
-        println!("{:#x?}", val);
-    }
-    unsafe {
-        let val = mmap_reader.add(1).read();
-        println!("{:#x?}", val);
+
+    for ii in 0..count {
+        unsafe {
+            let val = mmap_reader.add(ii as usize).read();
+            println!("{:#x?}", val);
+        }
     }
     //let mut mmap_reader: *const u32 = MEMORY_MAP_START as *const u32;
     //unsafe {

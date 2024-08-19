@@ -17,50 +17,80 @@ pub extern "C" fn _start(_disk_number: u16) {
         fail(b"Doesn't have CPUID");
     }
 
-    unsafe {
-        detect_memory();
-    }
+    let count = unsafe { detect_memory() };
 
-    print_hex(0x321a);
     unsafe {
         write_protected_gdt();
         load_gdt();
-        next_stage();
+        next_stage(count);
     }
 
     fail(b"return from protected");
 }
 
-unsafe fn detect_memory() {
+/// Detects memory using int 0x15 with eax = 0xE820, returns number of entries read
+unsafe fn detect_memory() -> u16 {
     let int15_ax = 0xE820;
     let magic_number = 0x534d4150;
     let mut mem_address: u16 = MEMORY_MAP_START as u16;
-    let magic_if_equal: u32;
-    asm!(
-        "mov eax, 0xE820",
-        "mov ebx, 0x0",
-        "mov edx, 0x534d4150",
-        "mov ecx, 24",
-        "int 0x15",
-        // If success:
-        // Carry is clear
-        // EBX is nonzero, should be preserved to next call
-        // CL has number of bytes stored (probably 20)
-        // If end:
-        // ebx == 0 or carry flag is set
-        inout("di") mem_address,
-        out("eax") magic_if_equal,
-    );
+
+    // Registers
+    let mut eax = int15_ax;
+    let mut di = mem_address;
+    let mut ebx = 0;
+    let mut ecx = 24;
+    let mut edx = magic_number;
+
+    let mut count = 0;
+    loop {
+        count += 1;
+        asm!(
+            "int 0x15",
+            // TODO: Put this check outside and remove "fail_asm" call. This doesn't even work
+            // really
+            "jc fail_asm",
+            // https://wiki.osdev.org/Detecting_Memory_(x86)#BIOS_Function:_INT_0x15,_EAX_=_0xE820
+            // If success:
+            // Carry is clear
+            // check EAX is magic number
+            // EBX is nonzero, should be preserved to next call
+            // CL has number of bytes stored (probably 20)
+            // If end:
+            // ebx == 0 or carry flag is set
+            inout("di") di,
+            inout("eax") eax,
+            inout("ebx") ebx,
+            inout("ecx") ecx,
+            inout("edx") edx,
+        );
+
+        if eax != magic_number {
+            fail(b"bad eax mem");
+        }
+
+        if ecx != 20 {
+            fail(b"mem offset bad");
+        }
+
+        // TODO: Also check carry is clear
+        if ebx == 0 {
+            break;
+        }
+
+        di += 24;
+        eax = int15_ax;
+        ecx = 24;
+    }
 
     // Reference: https://wiki.osdev.org/Detecting_Memory_(x86)
     // TODO: Increment di, reset eax and ecx, until ebx==0 or carry is set
+    count
 }
 
-unsafe fn next_stage() {
+unsafe fn next_stage(count: u16) {
     // Perform long jump
     unsafe {
         let entry_point = 0x7c00 + 0x600;
-        let val = 69;
         asm!(
             // align the stack
             "and esp, 0xffffff00",
@@ -68,7 +98,7 @@ unsafe fn next_stage() {
             "push {info:e}",
             // push entry point address
             "push {entry_point:e}",
-            info = in(reg) val as u32,
+            info = in(reg) count as u32,
             entry_point = in(reg) entry_point as u32,
         );
         // What does this do? I Think it just does a "long jump" one line down.
