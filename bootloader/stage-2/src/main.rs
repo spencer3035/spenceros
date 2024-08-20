@@ -21,22 +21,11 @@ pub extern "C" fn _start(count: u16) -> ! {
 
     let mut mmap_reader: *const MemoryMapEntry = MEMORY_MAP_START as *const MemoryMapEntry;
 
-    for ii in 0..count {
-        unsafe {
-            let val = mmap_reader.add(ii as usize).read();
-            println!("{:#x?}", val);
-        }
-    }
-    //let mut mmap_reader: *const u32 = MEMORY_MAP_START as *const u32;
-    //unsafe {
-    //    let start_low = mmap_reader.read();
-    //    let start_high = mmap_reader.add(1).read();
-    //    println!("low  = {start_low:x}");
-    //    println!("high = {start_high:x}");
-    //    let start_low = mmap_reader.add(2).read();
-    //    let start_high = mmap_reader.add(3).read();
-    //    println!("low  = {start_low:x}");
-    //    println!("high = {start_high:x}");
+    //for ii in 0..count {
+    //    unsafe {
+    //        let val = mmap_reader.add(ii as usize).read();
+    //        println!("{:#x?}", val);
+    //    }
     //}
 
     // Note that CPUID functionality is checked in stage-1
@@ -47,51 +36,6 @@ pub extern "C" fn _start(count: u16) -> ! {
         hlt();
     }
 
-    println!("MEM:");
-    let esp: u32;
-    let ebp: u32;
-    unsafe {
-        asm!(
-        "mov {esp}, esp",
-        "mov {ebp}, ebp",
-        esp = out(reg) esp,
-        ebp = out(reg) ebp,
-        );
-    }
-
-    println!("sp = 0x{esp:x}");
-    println!("bp = 0x{ebp:x}");
-    loop {}
-
-    // TODO: Set sp/bp and verify that the memory is set as expected. We could also just print the
-    // sp/bp values...
-    // This doesn't work
-    //unsafe {
-    //    asm!(
-    //    "mov eax, {stack_start}",
-    //    "mov esp, eax",
-    //    "mov ebp, 0",
-    //    "push 7",
-    //    stack_start = in(reg) STACK_END,
-    //    )
-    //}
-    let start = STACK_END;
-    let mut val = 0;
-    //for ii in 0..30 {
-    //    unsafe { start.add(ii).write(0xf) }
-    //    val += 1;
-    //}
-    unsafe {
-        //start.add(0).write(0x12);
-        //start.add(1).write(0x34);
-        //start.add(2).write(0xff);
-        print_memory_addresses(STACK_END.sub(16));
-    }
-
-    // TODO:
-    // Set up paging
-    // Load/update gdt to have long mode
-    // Enter Long Mode
     hlt();
 }
 
@@ -109,15 +53,41 @@ unsafe fn print_memory_addresses(mut start: *const u8) {
     println!("{as_arr:02x?}");
 }
 
-fn setup_paging() {
+/// Sets up paging at the configured addresses
+unsafe fn setup_paging() {
+    // TODO: Read and understand paging better:
+    // https://wiki.osdev.org/Setting_Up_Paging
+
     // Zero out addresses used for paging
     let starts = [PML4T_START, PDPT_START, PDT_START, PT_START];
     for start in starts {
-        for ii in 0..0x1000 {
+        for ii in 0..0x400 {
             unsafe {
-                start.add(ii).write(0);
+                // Sets the following:
+                // kernel-only mode
+                // write enabled
+                // not present
+                start.add(ii).write(2);
             }
         }
+    }
+
+    // Point pages to next values
+    unsafe {
+        (PML4T_START as *mut u32).write(PDPT_START as u32 + 3);
+        (PDPT_START as *mut u32).write(PDT_START as u32 + 3);
+        (PDT_START as *mut u32).write(PT_START as u32 + 3);
+    }
+
+    // TODO: check above and fix
+
+    // Enable paging
+    unsafe {
+        asm!(
+            "mov eax, cr4",
+            "or eax, 1 << 5", // PAE-bit is the 6th bit
+            "mov cr4, eax",
+        );
     }
 }
 

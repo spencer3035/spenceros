@@ -1,3 +1,4 @@
+/// What the gdt looks like in memory. Uses 6 bytes
 #[repr(packed)]
 pub struct GdtPointer {
     pub size: u16,
