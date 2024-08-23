@@ -1,3 +1,4 @@
+//#![cfg_attr(not(test), no_std)]
 #![no_std]
 #![no_main]
 
@@ -5,6 +6,8 @@ use core::arch::asm;
 
 use common::gdt::*;
 use common::*;
+
+static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
 #[link_section = ".start"]
 #[no_mangle]
@@ -20,7 +23,6 @@ pub extern "C" fn _start(_disk_number: u16) {
     let count = unsafe { detect_memory() };
 
     unsafe {
-        write_protected_gdt();
         load_gdt();
         next_stage(count);
     }
@@ -136,14 +138,13 @@ unsafe fn next_stage(count: u16) {
 #[inline(always)]
 unsafe fn load_gdt() {
     // Setup protected mode
+    GDT_PROTECTED.load();
     unsafe {
         asm!(
-            "cli", // Disable inturrupts
-            "lgdt [{gdt_location}]", // Load GDT
+            "cli",          // Disable inturrupts
             "mov eax, cr0", // Set protection enable bit
             "or eax, 1",
             "mov cr0, eax",
-            gdt_location = in(reg) GDT_POINTER
         );
     }
 }
@@ -166,43 +167,6 @@ unsafe fn enable_a20() {
 
     // Enable a20
     asm!("or al, 2", "and al, 0xFE", "out 0x92, al",);
-}
-
-/// Writes GDT and retuns number of bytes written
-unsafe fn write_protected_gdt() -> usize {
-    let gdt_code = GdtEntry::new(0, u32::MAX, kernel_code_flags(), extra_flags_protected());
-    let gdt_data = GdtEntry::new(0, u32::MAX, kernel_data_flags(), extra_flags_protected());
-
-    // TODO: Switch to writing entries directly instead of looping over bytes
-    let mut gdt_bytes = 0;
-    for byte in GdtEntry::null()
-        .bytes()
-        .iter()
-        .chain(gdt_code.bytes().iter())
-        .chain(gdt_data.bytes().iter())
-    {
-        unsafe {
-            GDT_START.add(gdt_bytes).write(*byte);
-        }
-        gdt_bytes += 1;
-    }
-
-    // Align to 4 byte boundary (Assumed GDT_START is on a 4 byte boundary)
-    let mut offset = gdt_bytes;
-    let gdt_bytes: u16 = gdt_bytes as u16;
-    let gdt_ptr = GdtPointer {
-        size: gdt_bytes - 1,
-        location: GDT_START as u32,
-    };
-
-    unsafe {
-        GDT_POINTER.write(gdt_ptr);
-    }
-    if offset % 4 != 0 {
-        offset += 4 - offset % 4;
-    }
-
-    offset
 }
 
 /// Checks if CPUID exists or not

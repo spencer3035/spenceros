@@ -1,5 +1,8 @@
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![allow(ambiguous_glob_imports)]
+
+#[cfg(test)]
+use core::assert;
 
 use core::mem::size_of;
 
@@ -20,7 +23,6 @@ pub use protected_mode::io::*;
 pub use protected_mode::*;
 
 pub mod gdt;
-use gdt::GdtPointer;
 
 // Info passed to the kernel
 #[repr(C)]
@@ -60,10 +62,6 @@ pub const PDT_START: *mut [u64; 0x200] = 0x3000 as *mut [u64; 0x200];
 /// Start of the PT,    takes up 0x1000 = 8 * 0x200 bytes
 pub const PT_START: *mut [u64; 0x200] = 0x4000 as *mut [u64; 0x200];
 
-/// Location of the GDT pointer, contains a u16 and u32, so 6 bytes
-pub const GDT_POINTER: *mut GdtPointer = 0x5000 as *mut GdtPointer;
-/// Location of the GDT, 6 bytes per entry, number of entries assumed to be less than 50.
-pub const GDT_START: *mut u8 = 0x5006 as *mut u8;
 /// Pointer to the bios info. Can't get exact size without unstable feature
 pub const BIOS_INFO: *const BiosInfo = (0x5006 + 6 * 50) as *const BiosInfo;
 /// Next thing

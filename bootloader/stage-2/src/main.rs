@@ -1,8 +1,11 @@
 #![no_std]
 #![no_main]
 
+use common::gdt::*;
 use common::*;
 use core::arch::asm;
+
+static GDT_LONG: Gdt = Gdt::long_mode();
 
 #[allow(dead_code)]
 #[repr(packed)]
@@ -37,7 +40,6 @@ pub extern "C" fn _start(_count: u16) -> ! {
     }
 
     unsafe {
-        asm!("cli");
         println!("Setting up paging");
         setup_paging();
     }
@@ -45,6 +47,9 @@ pub extern "C" fn _start(_count: u16) -> ! {
     {
         unsafe {
             asm!(
+                "mov eax, cr4",
+                "or eax, 1 << 5", // PAE-bit is the 6th bit
+                "mov cr4, eax",
                 // Set the C-register to the EFER Model Specific Register (MSR)
                 "mov ecx, 0xc0000080",
                 // Read from MSR
@@ -57,27 +62,22 @@ pub extern "C" fn _start(_count: u16) -> ! {
         }
     }
 
-    unsafe {
-        write_long_mode_gdt();
-    }
-
     // TODO: Load gdt and enter perform long jump to enter long mode
     unsafe {
         let entry_point =
             STAGE_0_START + (STAGE_0_SECTIONS + STAGE_1_SECTIONS + STAGE_2_SECTIONS) * 512;
 
-        clear_screen();
         println!("In protected mode, about to enter long mode");
+        clear_screen();
 
+        GDT_LONG.load();
         asm!(
-            "lgdt [{gdt_pointer}]",
             // Push value
             "push 0",
             "push '3'",
             // Push entry point
             "push 0",
             "push {entry_point:e}",
-            gdt_pointer = in(reg) GDT_POINTER as u32,
             entry_point = in(reg) entry_point as u32,
         );
 
@@ -93,23 +93,7 @@ pub extern "C" fn _start(_count: u16) -> ! {
 
         asm!(
             ".code64",
-            // Debug
-            "mov ah, 0xf0",
-            "mov al, '4'",
-            "mov [0xb8000], ax",
-            "2:",
-            "jmp 2b",
-            // End debug
-        );
 
-        asm!(
-            ".code64",
-
-            "mov ah, 0x0f",
-            "mov al, '3'",
-            "mov [0xb8000], ax",
-            "2:",
-            "jmp 2b",
 
             // reload segment registers
             "mov {0}, 0x10",
@@ -118,8 +102,6 @@ pub extern "C" fn _start(_count: u16) -> ! {
             "mov ss, {0}",
 
 
-            "2:",
-            "jmp 2b",
 
 
             // jump to stage-3
@@ -134,46 +116,6 @@ pub extern "C" fn _start(_count: u16) -> ! {
         );
     }
     hlt();
-}
-
-use common::gdt::*;
-
-/// Writes GDT and retuns number of bytes written
-unsafe fn write_long_mode_gdt() -> usize {
-    let gdt_code = GdtEntry::new(0, u32::MAX, kernel_code_flags(), extra_flags_long());
-    let gdt_data = GdtEntry::new(0, u32::MAX, kernel_data_flags(), extra_flags_protected());
-
-    let mut gdt_bytes = 0;
-    // TODO: Switch to writing entries directly instead of looping over bytes
-    // TODO: Write TSS
-    for byte in GdtEntry::null()
-        .bytes()
-        .iter()
-        .chain(gdt_code.bytes().iter())
-        .chain(gdt_data.bytes().iter())
-    {
-        unsafe {
-            GDT_START.add(gdt_bytes).write(*byte);
-        }
-        gdt_bytes += 1;
-    }
-
-    // Align to 4 byte boundary (Assumed GDT_START is on a 4 byte boundary)
-    let mut offset = gdt_bytes;
-    let gdt_bytes: u16 = gdt_bytes as u16;
-    let gdt_ptr = GdtPointer {
-        size: gdt_bytes - 1,
-        location: GDT_START as u32,
-    };
-
-    unsafe {
-        GDT_POINTER.write(gdt_ptr);
-    }
-    if offset % 4 != 0 {
-        offset += 4 - offset % 4;
-    }
-
-    offset
 }
 
 #[allow(dead_code)]
@@ -243,15 +185,6 @@ unsafe fn setup_paging() {
         let flags: u64 = PRESENT | READ_WRITE;
         let entry = addr | flags;
         pt[ii] = entry;
-    }
-
-    // Enable paging
-    unsafe {
-        asm!(
-            "mov eax, cr4",
-            "or eax, 1 << 5", // PAE-bit is the 6th bit
-            "mov cr4, eax",
-        );
     }
 }
 

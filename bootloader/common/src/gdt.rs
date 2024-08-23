@@ -1,8 +1,60 @@
-/// What the gdt looks like in memory. Uses 6 bytes
-#[repr(packed)]
-pub struct GdtPointer {
-    pub size: u16,
-    pub location: u32,
+use core::{arch::asm, mem::size_of};
+
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct GdtEntry(u64);
+
+impl GdtEntry {
+    #[inline]
+    const fn null() -> GdtEntry {
+        GdtEntry(0)
+    }
+
+    #[inline]
+    pub const fn code_32() -> GdtEntry {
+        GdtEntry::new(0, 0xFFFFF, kernel_code_flags(), extra_flags_protected())
+    }
+
+    #[inline]
+    pub const fn data_32() -> GdtEntry {
+        GdtEntry::new(0, 0xFFFFF, kernel_data_flags(), extra_flags_protected())
+    }
+
+    #[inline]
+    pub const fn data_64() -> GdtEntry {
+        GdtEntry::new(0, 0xFFFFF, kernel_data_flags(), extra_flags_long())
+    }
+
+    #[inline]
+    pub const fn code_64() -> GdtEntry {
+        GdtEntry::code_32()
+    }
+
+    #[inline]
+    pub const fn new(
+        base: u32,
+        limit: u32,
+        access_flags: AccessFlags,
+        extra_flags: ExtraFlags,
+    ) -> Self {
+        let mut target = [0u8; 8];
+
+        // Encode limit
+        target[0] = (limit & 0xff) as u8;
+        target[1] = (limit >> 8) as u8;
+        target[6] = (limit >> 16) as u8 & 0x0f;
+
+        // Encode base
+        target[2] = (base & 0xFF) as u8;
+        target[3] = (base >> 8) as u8;
+        target[4] = (base >> 16) as u8;
+        target[7] = (base >> 24) as u8;
+
+        target[5] = access_flags.0;
+        target[6] |= extra_flags.0 << 4;
+
+        GdtEntry(u64::from_le_bytes(target))
+    }
 }
 
 // Access flags:
@@ -74,54 +126,71 @@ pub const fn extra_flags_long() -> ExtraFlags {
     ExtraFlags(GRANULARITY | LONG_MODE)
 }
 
+#[derive(Debug)]
 pub struct ExtraFlags(u8);
+#[derive(Debug)]
 pub struct AccessFlags(u8);
 
-pub struct GdtEntry {
-    base: u32,
-    limit: u32,
-    access_flags: AccessFlags,
-    // Only bottom 4 bits should be set in this
-    extra_flags: ExtraFlags,
+/// What the gdt looks like in memory.
+///
+/// Uses 6 bytes when in 32 bit protected mode and 10 bytes when in 64 bit long mode
+#[derive(Debug)]
+// Gets written directly to memory
+#[allow(dead_code)]
+pub struct Gdt {
+    null: GdtEntry,
+    code: GdtEntry,
+    data: GdtEntry,
 }
 
-impl GdtEntry {
-    /// Makes new gdt entry with the given values
-    pub fn new(base: u32, limit: u32, access_flags: AccessFlags, extra_flags: ExtraFlags) -> Self {
-        GdtEntry {
-            base,
-            limit,
-            access_flags,
-            extra_flags,
+#[derive(Debug)]
+#[repr(C, packed(2))]
+pub struct GdtPointer {
+    pub limit: u16,
+    pub base: *const Gdt,
+    // We conditionally pad the struct so that it will always be a valid width for 64 bit mode
+    #[cfg(target_pointer_width = "32")]
+    _pad: [u8; 4],
+}
+
+#[test]
+fn test_size() {
+    if cfg!(target_pointer_width = "32") {
+        assert_eq!(core::mem::size_of::<GdtPointer>(), 6 + 4)
+    } else if cfg!(target_pointer_width = "64") {
+        assert_eq!(core::mem::size_of::<GdtPointer>(), 10)
+    } else {
+        panic!("No valid target pointer width!");
+    }
+}
+
+impl Gdt {
+    pub fn load(&'static self) {
+        let pointer = GdtPointer {
+            limit: size_of::<Gdt>() as u16,
+            base: self,
+            #[cfg(target_pointer_width = "32")]
+            _pad: [0; 4],
+        };
+
+        unsafe {
+            asm!("lgdt [{}]", in(reg) &pointer, options(readonly, nostack, preserves_flags));
         }
     }
-    /// Gets null GdtEntry
-    pub const fn null() -> Self {
-        GdtEntry {
-            base: 0,
-            limit: 0,
-            access_flags: AccessFlags(0),
-            extra_flags: ExtraFlags(0),
+
+    pub const fn protected_mode() -> Gdt {
+        Gdt {
+            null: GdtEntry::null(),
+            code: GdtEntry::code_32(),
+            data: GdtEntry::data_32(),
         }
     }
 
-    pub fn bytes(&self) -> [u8; 8] {
-        let mut target = [0u8; 8];
-
-        // Encode limit
-        target[0] = (self.limit & 0xff) as u8;
-        target[1] = (self.limit >> 8) as u8;
-        target[6] = (self.limit >> 16) as u8 & 0x0f;
-
-        // Encode base
-        target[2] = (self.base & 0xFF) as u8;
-        target[3] = (self.base >> 8) as u8;
-        target[4] = (self.base >> 16) as u8;
-        target[7] = (self.base >> 24) as u8;
-
-        target[5] = self.access_flags.0;
-        target[6] |= self.extra_flags.0 << 4;
-
-        target
+    pub const fn long_mode() -> Gdt {
+        Gdt {
+            null: GdtEntry::null(),
+            code: GdtEntry::code_64(),
+            data: GdtEntry::data_64(),
+        }
     }
 }

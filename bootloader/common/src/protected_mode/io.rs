@@ -53,9 +53,7 @@ pub fn clear_screen() {
         }
     }
 
-    unsafe {
-        WRITE_INDEX.store(0, Ordering::Relaxed);
-    }
+    WRITE_INDEX.store(0, Ordering::Relaxed);
 }
 
 #[allow(dead_code)]
