@@ -29,10 +29,15 @@ pub struct BiosInfo {
     pub memory_map_count: usize,
 }
 
+pub const STAGE_0_START: usize = 0x7c00;
+/// Number of 512 byte sections stage 0 takes up
+pub const STAGE_0_SECTIONS: usize = 1;
 /// Number of 512 byte sections stage 1 takes up
 pub const STAGE_1_SECTIONS: usize = 2;
 /// Number of 512 byte sections stage 2 takes up
 pub const STAGE_2_SECTIONS: usize = 0x20;
+/// Number of 512 byte sections stage 3 takes up
+pub const STAGE_3_SECTIONS: usize = 0x20;
 
 // Pointers to memory. These should not overlap and be documented how large each of the sections
 // are needed
@@ -42,14 +47,14 @@ pub const STACK_START: *mut u8 = 0x0 as *mut u8;
 /// Highest address of the stack, stack grows down so BP should be set to this value
 pub const STACK_END: *mut u8 = 0x1000 as *mut u8;
 
-/// Start of the PML4T, takes up 0x1000 bytes
-pub const PML4T_START: *mut u32 = 0x1000 as *mut u32;
-/// Start of the PDPT, takes up 0x1000 bytes
-pub const PDPT_START: *mut u32 = 0x2000 as *mut u32;
-/// Start of the PDT, takes up 0x1000 bytes
-pub const PDT_START: *mut u32 = 0x3000 as *mut u32;
-/// Start of the PT, takes up 0x1000 bytes
-pub const PT_START: *mut u32 = 0x4000 as *mut u32;
+/// Start of the PML4T, takes up 0x1000 = 8 * 0x200 bytes
+pub const PML4T_START: *mut [u64; 0x200] = 0x1000 as *mut [u64; 0x200];
+/// Start of the PDPT,  takes up 0x1000 = 8 * 0x200 bytes
+pub const PDPT_START: *mut [u64; 0x200] = 0x2000 as *mut [u64; 0x200];
+/// Start of the PDT,   takes up 0x1000 = 8 * 0x200 bytes
+pub const PDT_START: *mut [u64; 0x200] = 0x3000 as *mut [u64; 0x200];
+/// Start of the PT,    takes up 0x1000 = 8 * 0x200 bytes
+pub const PT_START: *mut [u64; 0x200] = 0x4000 as *mut [u64; 0x200];
 
 /// Location of the GDT pointer, contains a u16 and u32, so 6 bytes
 pub const GDT_POINTER: *mut GdtPointer = 0x5000 as *mut GdtPointer;
@@ -63,3 +68,11 @@ pub const NEXT: *const u8 = ((0x5006 + 6 * 50) + size_of::<BiosInfo>()) as *cons
 /// Start of the memory map, each entry is 24 bytes, number of entries is not known at runtime, but
 /// in the emulator it is 7 entries which would be 7*24=168 bytes
 pub const MEMORY_MAP_START: *mut u8 = 0x6000 as *mut u8;
+
+#[test]
+fn test_pages_aligned() {
+    assert!(PML4T_START as u64 % 4096 == 0, "Page not 4096 aligned");
+    assert!(PDPT_START as u64 % 4096 == 0, "Page not 4096 aligned");
+    assert!(PDT_START as u64 % 4096 == 0, "Page not 4096 aligned");
+    assert!(PT_START as u64 % 4096 == 0, "Page not 4096 aligned");
+}

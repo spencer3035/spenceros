@@ -19,8 +19,7 @@ pub extern "C" fn _start(count: u16) -> ! {
     clear_screen();
     println!("Started protected mode");
 
-    let mut mmap_reader: *const MemoryMapEntry = MEMORY_MAP_START as *const MemoryMapEntry;
-
+    //let mut mmap_reader: *const MemoryMapEntry = MEMORY_MAP_START as *const MemoryMapEntry;
     //for ii in 0..count {
     //    unsafe {
     //        let val = mmap_reader.add(ii as usize).read();
@@ -36,7 +35,121 @@ pub extern "C" fn _start(count: u16) -> ! {
         hlt();
     }
 
+    unsafe {
+        asm!("cli");
+        println!("Setting up paging");
+        setup_paging();
+    }
+    // Enter enable paging and enter 32 bit compatability submode of long mode
+    {
+        unsafe {
+            asm!(
+                // Set the C-register to the EFER Model Specific Register (MSR)
+                "mov ecx, 0xc0000080",
+                // Read from MSR
+                "rdmsr",
+                // Set the LM-bit
+                "or eax, 1 << 8",
+                // Write to MSR
+                "wrmsr"
+            );
+        }
+    }
+
+    unsafe {
+        println!("Setting up gdt");
+        write_long_mode_gdt();
+    }
+
     hlt();
+
+    // TODO: Load gdt and enter perform long jump to enter long mode
+    unsafe {
+        asm!(
+            "lgdt [{gdt_pointer}]",
+            gdt_pointer = in(reg) GDT_POINTER as u32
+        );
+        // What does this do? I Think it just does a "long jump" one line down.
+        asm!(
+            // Perform long jump to next address? How do we know this is sector 0x8?
+            // Also what is 2f? Should it be interpreted as 0x2f? Changing it to that breaks things
+            "ljmp $0x8, $2f",
+            // Label? How does this not conflict with below
+            "2:",
+            // Why do we need att_syntax?
+            options(att_syntax)
+        );
+
+        // Data segment is 3nd entry, after null and code
+        let mut data_segment = GDT_START as u32 + 8 * 3;
+        let entry_point =
+            STAGE_0_START + (STAGE_0_SECTIONS + STAGE_1_SECTIONS + STAGE_2_SECTIONS) * 512;
+        asm!(
+            ".code64",
+
+            // reload segment registers
+            "mov ds, {data_segment}",
+            "mov es, {data_segment}",
+            "mov ss, {data_segment}",
+
+            // jump to stage-3
+            "mov rax, '3'",
+            "push rax",
+            // This should be valid because the rax higher bit values should be zeroed out byt eh
+            // mov rax above. So we can kind of convert 32 bit mode to 64 bit mode
+            "mov eax, {entry_point}",
+            "call rax",
+
+            // enter endless loop in case stage-2 returns
+            "2:",
+            "jmp 2b",
+            data_segment = inout(reg) data_segment,
+            entry_point = in(reg) entry_point,
+        );
+    }
+    println!("Done");
+
+    hlt();
+}
+
+use common::gdt::*;
+
+/// Writes GDT and retuns number of bytes written
+unsafe fn write_long_mode_gdt() -> usize {
+    let gdt_code = GdtEntry::new(0, u32::MAX, kernel_code_flags(), extra_flags_long());
+    let gdt_data = GdtEntry::new(0, u32::MAX, kernel_data_flags(), extra_flags_protected());
+
+    let mut gdt_bytes = 0;
+    // TODO: Switch to writing entries directly instead of looping over bytes
+    // TODO: Write TSS
+    for byte in GdtEntry::null()
+        .bytes()
+        .iter()
+        .chain(gdt_code.bytes().iter())
+        .chain(gdt_data.bytes().iter())
+    {
+        unsafe {
+            GDT_START.add(gdt_bytes).write(*byte);
+        }
+        gdt_bytes += 1;
+    }
+
+    // Align to 4 byte boundary (Assumed GDT_START is on a 4 byte boundary)
+    let mut offset = gdt_bytes;
+    let gdt_bytes: u16 = gdt_bytes as u16;
+    let gdt_ptr = GdtPointer {
+        size: gdt_bytes - 1,
+        location: GDT_START as u32,
+    };
+
+    unsafe {
+        GDT_POINTER.write(gdt_ptr);
+    }
+    if offset % 4 != 0 {
+        offset += 4 - offset % 4;
+    }
+
+    offset
 }
 
 unsafe fn print_memory_addresses(mut start: *const u8) {
@@ -53,6 +166,19 @@ unsafe fn print_memory_addresses(mut start: *const u8) {
     println!("{as_arr:02x?}");
 }
 
+/// If paget is present in physical memory, else not present
+const PRESENT: u64 = 1 << 0;
+/// If the page is read/write, else read-only
+const READ_WRITE: u64 = 1 << 1;
+/// If the page can be accessed by all, else only superuser
+const USER_SUPERUSER: u64 = 1 << 2;
+/// If write through caching is enabled, else not
+const WRITE_THROUGH: u64 = 1 << 3;
+/// If caching is disabled, else it is enabled
+const CACHE_DISABLE: u64 = 1 << 4;
+/// If the page is being accessed or not
+const ACCESSED: u64 = 1 << 5;
+
 /// Sets up paging at the configured addresses
 unsafe fn setup_paging() {
     // TODO: Read and understand paging better:
@@ -60,26 +186,35 @@ unsafe fn setup_paging() {
 
     // Zero out addresses used for paging
     let starts = [PML4T_START, PDPT_START, PDT_START, PT_START];
+    //for val in unsafe { PML4T_START.as_uninit_ref()}
     for start in starts {
-        for ii in 0..0x400 {
-            unsafe {
-                // Sets the following:
-                // kernel-only mode
-                // write enabled
-                // not present
-                start.add(ii).write(2);
-            }
+        // There are 512 entries in 64 bit page
+        // SAFETY: start is expected to be uninit, we init it here.
+        let table: &mut [u64; 0x200] = unsafe { start.as_mut().unwrap() };
+        for val in table.iter_mut() {
+            // Read write, but not present (yet)
+            *val = READ_WRITE;
         }
     }
 
-    // Point pages to next values
+    // Point first entry in PML4T, PDPT, and PDT to point to the only existing table
     unsafe {
-        (PML4T_START as *mut u32).write(PDPT_START as u32 + 3);
-        (PDPT_START as *mut u32).write(PDT_START as u32 + 3);
-        (PDT_START as *mut u32).write(PT_START as u32 + 3);
+        // This or operation works because the page tables must be 0x1000 aligned, so the last 12
+        // bits of the address must be 0.
+        PML4T_START.as_mut().unwrap()[0] = PDPT_START as u64 | READ_WRITE | PRESENT;
+        PDPT_START.as_mut().unwrap()[0] = PDT_START as u64 | READ_WRITE | PRESENT;
+        PDT_START.as_mut().unwrap()[0] = PT_START as u64 | READ_WRITE | PRESENT;
     }
 
-    // TODO: check above and fix
+    // Identity map the PT to the first 2 MB
+    // SAFETY: PT_START is expected to be uninitalized, we initialize all the values here
+    let pt: &mut [u64; 0x200] = unsafe { PT_START.as_mut().unwrap() };
+    for ii in 0..0x200 {
+        let addr: u64 = 0x1000 * (ii as u64);
+        let flags: u64 = PRESENT | READ_WRITE;
+        let entry = addr | flags;
+        pt[ii] = entry;
+    }
 
     // Enable paging
     unsafe {

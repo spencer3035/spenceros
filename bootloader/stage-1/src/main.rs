@@ -133,7 +133,7 @@ unsafe fn next_stage(count: u16) {
     }
 }
 
-/// Disables inturrupts and loads GDT
+/// Disables interrupts and loads GDT
 #[inline(always)]
 unsafe fn load_gdt() {
     // Setup protected mode
@@ -174,6 +174,7 @@ unsafe fn write_protected_gdt() -> usize {
     let gdt_code = GdtEntry::new(0, u32::MAX, kernel_code_flags(), extra_flags_protected());
     let gdt_data = GdtEntry::new(0, u32::MAX, kernel_data_flags(), extra_flags_protected());
 
+    // TODO: Switch to writing entries directly instead of looping over bytes
     let mut gdt_bytes = 0;
     for byte in GdtEntry::null()
         .bytes()
