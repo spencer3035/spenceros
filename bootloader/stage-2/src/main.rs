@@ -32,24 +32,25 @@ pub extern "C" fn _start(_count: u16) -> ! {
     //}
 
     // Note that CPUID functionality is checked in stage-1
-    if has_long_mode() {
-        println!("We have long mode");
-    } else {
+    if !has_long_mode() {
         println!("No long mode!");
         hlt();
     }
 
     unsafe {
         println!("Setting up paging");
-        setup_paging();
+        load_page_tables();
     }
     // Enter enable paging and enter 32 bit compatability submode of long mode
     {
+        // TODO: Something is probably broken here
         unsafe {
             asm!(
+                // Eanable PAE paging:
                 "mov eax, cr4",
                 "or eax, 1 << 5", // PAE-bit is the 6th bit
                 "mov cr4, eax",
+                // Set long mode bit:
                 // Set the C-register to the EFER Model Specific Register (MSR)
                 "mov ecx, 0xc0000080",
                 // Read from MSR
@@ -57,7 +58,12 @@ pub extern "C" fn _start(_count: u16) -> ! {
                 // Set the LM-bit
                 "or eax, 1 << 8",
                 // Write to MSR
-                "wrmsr"
+                "wrmsr",
+                // Enable paging
+                "mov eax, cr0",
+                "or eax, 1 << 31", // PG-bit is the 31st bit
+                "mov cr0, eax",
+                // We are now in the 32 bit compatability submode of long mode
             );
         }
     }
@@ -67,8 +73,8 @@ pub extern "C" fn _start(_count: u16) -> ! {
         let entry_point =
             STAGE_0_START + (STAGE_0_SECTIONS + STAGE_1_SECTIONS + STAGE_2_SECTIONS) * 512;
 
-        println!("In protected mode, about to enter long mode");
-        clear_screen();
+        //println!("In protected mode, about to enter long mode");
+        //clear_screen();
 
         GDT_LONG.load();
         asm!(
@@ -93,16 +99,11 @@ pub extern "C" fn _start(_count: u16) -> ! {
 
         asm!(
             ".code64",
-
-
             // reload segment registers
             "mov {0}, 0x10",
             "mov ds, {0}",
             "mov es, {0}",
             "mov ss, {0}",
-
-
-
 
             // jump to stage-3
             "pop rax",
@@ -151,7 +152,7 @@ const CACHE_DISABLE: u64 = 1 << 4;
 const ACCESSED: u64 = 1 << 5;
 
 /// Sets up paging at the configured addresses
-unsafe fn setup_paging() {
+unsafe fn load_page_tables() {
     // TODO: Read and understand paging better:
     // https://wiki.osdev.org/Setting_Up_Paging
 
