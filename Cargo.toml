@@ -14,7 +14,8 @@ members = [
   "bootloader/common", 
   "bootloader/stage-0", 
   "bootloader/stage-1",
-  "bootloader/stage-2"
+  "bootloader/stage-2",
+  "bootloader/stage-3"
   ]
 
 [profile.dev]

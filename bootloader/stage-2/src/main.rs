@@ -4,6 +4,7 @@
 use common::*;
 use core::arch::asm;
 
+#[allow(dead_code)]
 #[repr(packed)]
 #[derive(Debug)]
 struct MemoryMapEntry {
@@ -15,7 +16,7 @@ struct MemoryMapEntry {
 
 #[link_section = ".start"]
 #[no_mangle]
-pub extern "C" fn _start(count: u16) -> ! {
+pub extern "C" fn _start(_count: u16) -> ! {
     clear_screen();
     println!("Started protected mode");
 
@@ -57,58 +58,81 @@ pub extern "C" fn _start(count: u16) -> ! {
     }
 
     unsafe {
-        println!("Setting up gdt");
         write_long_mode_gdt();
     }
 
-    hlt();
-
     // TODO: Load gdt and enter perform long jump to enter long mode
     unsafe {
+        let entry_point =
+            STAGE_0_START + (STAGE_0_SECTIONS + STAGE_1_SECTIONS + STAGE_2_SECTIONS) * 512;
+
+        clear_screen();
+        println!("In protected mode, about to enter long mode");
+
         asm!(
             "lgdt [{gdt_pointer}]",
-            gdt_pointer = in(reg) GDT_POINTER as u32
+            // Push value
+            "push 0",
+            "push '3'",
+            // Push entry point
+            "push 0",
+            "push {entry_point:e}",
+            gdt_pointer = in(reg) GDT_POINTER as u32,
+            entry_point = in(reg) entry_point as u32,
         );
-        // What does this do? I Think it just does a "long jump" one line down.
+
+        // Perform a "long jump" to one line down.
         asm!(
-            // Perform long jump to next address? How do we know this is sector 0x8?
-            // Also what is 2f? Should it be interpreted as 0x2f? Changing it to that breaks things
-            "ljmp $0x8, $2f",
-            // Label? How does this not conflict with below
+            // TODO: How do we know this is sector 0x8?
+            // Note that 2f means jump (f)orward to the next local label "2:"
+            "ljmp $0x08, $2f",
+            // Relative label that we jump to
             "2:",
-            // Why do we need att_syntax?
             options(att_syntax)
         );
 
-        // Data segment is 3nd entry, after null and code
-        let mut data_segment = GDT_START as u32 + 8 * 3;
-        let entry_point =
-            STAGE_0_START + (STAGE_0_SECTIONS + STAGE_1_SECTIONS + STAGE_2_SECTIONS) * 512;
+        asm!(
+            ".code64",
+            // Debug
+            "mov ah, 0xf0",
+            "mov al, '4'",
+            "mov [0xb8000], ax",
+            "2:",
+            "jmp 2b",
+            // End debug
+        );
+
         asm!(
             ".code64",
 
+            "mov ah, 0x0f",
+            "mov al, '3'",
+            "mov [0xb8000], ax",
+            "2:",
+            "jmp 2b",
+
             // reload segment registers
-            "mov ds, {data_segment}",
-            "mov es, {data_segment}",
-            "mov ss, {data_segment}",
+            "mov {0}, 0x10",
+            "mov ds, {0}",
+            "mov es, {0}",
+            "mov ss, {0}",
+
+
+            "2:",
+            "jmp 2b",
+
 
             // jump to stage-3
-            "mov rax, '3'",
-            "push rax",
-            // This should be valid because the rax higher bit values should be zeroed out byt eh
-            // mov rax above. So we can kind of convert 32 bit mode to 64 bit mode
-            "mov eax, {entry_point}",
+            "pop rax",
+            "pop rdi",
             "call rax",
 
             // enter endless loop in case stage-2 returns
             "2:",
             "jmp 2b",
-            data_segment = inout(reg) data_segment,
-            entry_point = in(reg) entry_point,
+            out(reg) _,
         );
     }
-    println!("Done");
-
     hlt();
 }
 
@@ -152,7 +176,8 @@ unsafe fn write_long_mode_gdt() -> usize {
     offset
 }
 
-unsafe fn print_memory_addresses(mut start: *const u8) {
+#[allow(dead_code)]
+fn print_memory_addresses(start: *const u8) {
     let size = 16;
     //let num_lines = 20;
     //for ii in 0..num_lines {
@@ -161,7 +186,7 @@ unsafe fn print_memory_addresses(mut start: *const u8) {
     //    println!("{as_arr:02x?}");
     //    start = start.add(16);
     //}
-    let as_arr = core::slice::from_raw_parts(start, size);
+    let as_arr = unsafe { core::slice::from_raw_parts(start, size) };
     print!("0x{:04x}: ", start as u64);
     println!("{as_arr:02x?}");
 }
@@ -170,12 +195,16 @@ unsafe fn print_memory_addresses(mut start: *const u8) {
 const PRESENT: u64 = 1 << 0;
 /// If the page is read/write, else read-only
 const READ_WRITE: u64 = 1 << 1;
+#[allow(dead_code)]
 /// If the page can be accessed by all, else only superuser
 const USER_SUPERUSER: u64 = 1 << 2;
+#[allow(dead_code)]
 /// If write through caching is enabled, else not
 const WRITE_THROUGH: u64 = 1 << 3;
+#[allow(dead_code)]
 /// If caching is disabled, else it is enabled
 const CACHE_DISABLE: u64 = 1 << 4;
+#[allow(dead_code)]
 /// If the page is being accessed or not
 const ACCESSED: u64 = 1 << 5;
 

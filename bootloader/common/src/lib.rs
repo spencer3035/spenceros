@@ -35,9 +35,13 @@ pub const STAGE_0_SECTIONS: usize = 1;
 /// Number of 512 byte sections stage 1 takes up
 pub const STAGE_1_SECTIONS: usize = 2;
 /// Number of 512 byte sections stage 2 takes up
-pub const STAGE_2_SECTIONS: usize = 0x20;
+pub const STAGE_2_SECTIONS: usize = 0x10;
 /// Number of 512 byte sections stage 3 takes up
 pub const STAGE_3_SECTIONS: usize = 0x20;
+
+/// Total number of boot sectors we need to read. Not including the 0th boot sector loaded into
+/// memory from the bios.
+pub const SECTORS_TO_READ: usize = STAGE_1_SECTIONS + STAGE_2_SECTIONS + STAGE_3_SECTIONS;
 
 // Pointers to memory. These should not overlap and be documented how large each of the sections
 // are needed
@@ -68,6 +72,11 @@ pub const NEXT: *const u8 = ((0x5006 + 6 * 50) + size_of::<BiosInfo>()) as *cons
 /// Start of the memory map, each entry is 24 bytes, number of entries is not known at runtime, but
 /// in the emulator it is 7 entries which would be 7*24=168 bytes
 pub const MEMORY_MAP_START: *mut u8 = 0x6000 as *mut u8;
+
+#[test]
+fn test_sectors_readable() {
+    assert!(SECTORS_TO_READ < u8::MAX as usize);
+}
 
 #[test]
 fn test_pages_aligned() {

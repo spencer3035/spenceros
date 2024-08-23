@@ -52,6 +52,10 @@ pub fn clear_screen() {
             TEXT_ADDRESS.add(ii).write(value);
         }
     }
+
+    unsafe {
+        WRITE_INDEX.store(0, Ordering::Relaxed);
+    }
 }
 
 #[allow(dead_code)]

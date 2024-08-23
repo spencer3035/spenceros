@@ -45,7 +45,7 @@ SECTIONS {
         QUAD(0)
     }
 
-    . = 0x7c00 + 510;
+    . = 0x7c00 + 0x200 - 2;
 
     .magic_number :
     {

@@ -30,6 +30,7 @@ fn elf_to_bin(elf_file: &Path) -> PathBuf {
 enum NBits {
     Bits16,
     Bits32,
+    Bits64,
 }
 
 /// Builds a 16 bit elf file from a cargo package
@@ -39,6 +40,7 @@ fn build_elf(local_path: &Path, out_dir: &Path, bits: NBits) -> PathBuf {
     let target = match bits {
         NBits::Bits16 => "tuples/i386-bit16.json",
         NBits::Bits32 => "tuples/i386-bit32.json",
+        NBits::Bits64 => "tuples/x86_64-unknown-kernel.json",
     };
     cmd.arg("install")
         .arg("--path")
@@ -86,6 +88,15 @@ fn build_stage_2(out_dir: &Path) -> PathBuf {
     elf_to_bin(&build_elf(&local_path, out_dir, NBits::Bits32))
 }
 
+fn build_stage_3(out_dir: &Path) -> PathBuf {
+    // Build ./bootloader/stage-2/
+    let local_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("bootloader")
+        .join("stage-3");
+    println!("cargo:rerun-if-changed={}", local_path.display());
+    elf_to_bin(&build_elf(&local_path, out_dir, NBits::Bits64))
+}
+
 fn main() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
 
@@ -101,4 +112,6 @@ fn main() {
     println!("cargo:rustc-env=BIOS_STAGE1={}", file.display());
     let file = build_stage_2(&out_dir);
     println!("cargo:rustc-env=BIOS_STAGE2={}", file.display());
+    let file = build_stage_3(&out_dir);
+    println!("cargo:rustc-env=BIOS_STAGE3={}", file.display());
 }

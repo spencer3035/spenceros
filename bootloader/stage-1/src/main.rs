@@ -32,7 +32,7 @@ pub extern "C" fn _start(_disk_number: u16) {
 unsafe fn detect_memory() -> u16 {
     let int15_ax = 0xE820;
     let magic_number = 0x534d4150;
-    let mut mem_address: u16 = MEMORY_MAP_START as u16;
+    let mem_address: u16 = MEMORY_MAP_START as u16;
 
     // Registers
     let mut eax = int15_ax;
@@ -101,14 +101,13 @@ unsafe fn next_stage(count: u16) {
             info = in(reg) count as u32,
             entry_point = in(reg) entry_point as u32,
         );
-        // What does this do? I Think it just does a "long jump" one line down.
+        // Perform a "long jump" to one line down.
         asm!(
-            // Perform long jump to next address? How do we know this is sector 0x8?
-            // Also what is 2f? Should it be interpreted as 0x2f? Changing it to that breaks things
-            "ljmp $0x8, $2f",
-            // Label? How does this not conflict with below
+            // TODO: How do we know this is sector 0x8?
+            // Note that 2f means jump (f)orward to the next local label "2:"
+            "ljmp $0x08, $2f",
+            // Relative label that we jump to
             "2:",
-            // Why do we need att_syntax?
             options(att_syntax)
         );
         asm!(

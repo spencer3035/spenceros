@@ -7,7 +7,6 @@ use core::arch::asm;
 use core::arch::global_asm;
 
 use common::*;
-const SECTORS_TO_READ: u8 = STAGE_1_SECTIONS as u8 + STAGE_2_SECTIONS as u8;
 
 extern "C" {
     /// The address of this number is set in the link.ld file to be the first byte of the next
@@ -50,7 +49,7 @@ unsafe fn check_int13() {
 }
 
 fn load_sectors(drive_number: u16) {
-    let mut num_sectors: u8 = SECTORS_TO_READ;
+    let mut num_sectors: u8 = SECTORS_TO_READ as u8;
     let requested_sectors = num_sectors;
     let to_address: u16 = 0x7e00;
     let carry: u16;

@@ -1,7 +1,7 @@
 ENTRY(_start)
 
 SECTIONS {
-    . = 0x7c00 + 0x600;
+    . = 0x7c00 + 0x2600;
 
     .start :
     {
@@ -29,8 +29,8 @@ SECTIONS {
         *(.eh_frame_hdr .eh_frame_hdr.*)
     }
 
-    _third_stage_end = .;
-    . = 0x7c00 + 0x2600 - 0x2;
+    _fourth_stage_end = .;
+    . = 0x7c00 + 0x6600 - 0x2;
     .end_marker :
     {
         SHORT(0xadde)
