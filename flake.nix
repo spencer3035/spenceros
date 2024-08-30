@@ -39,6 +39,7 @@
           inherit buildInputs;
           name = "test_boot";
           src = ./.;
+          # TODO:
           buildPhase = ''
             make
             #nasm -f bin ./src/asm/boot.asm -o boot.bin
