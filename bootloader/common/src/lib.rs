@@ -21,11 +21,12 @@ pub struct BiosInfo {
     pub memory_map_count: usize,
 }
 
+/// The start of the first stage in memory, defined by BIOS
 pub const STAGE_0_START: usize = 0x7c00;
 /// Number of 512 byte sections stage 0 takes up
 pub const STAGE_0_SECTIONS: usize = 1;
 /// Number of 512 byte sections stage 1 takes up
-pub const STAGE_1_SECTIONS: usize = 0x10;
+pub const STAGE_1_SECTIONS: usize = 0x20;
 /// Number of 512 byte sections stage 2 takes up
 pub const STAGE_2_SECTIONS: usize = 0x10;
 /// Number of 512 byte sections stage 3 takes up

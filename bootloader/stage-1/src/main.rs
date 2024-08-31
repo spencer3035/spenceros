@@ -18,7 +18,8 @@ fn panic(info: &PanicInfo) -> ! {
     hlt();
 }
 
-mod write {}
+use vbe::get_vbe_info;
+pub mod vbe;
 
 #[link_section = ".start"]
 #[no_mangle]
@@ -30,16 +31,20 @@ pub extern "C" fn _start(_disk_number: u16) {
     }
 
     if !has_cpuid() {
-        panic!("Doesn't have CPUID");
+        panic!("CPUID not present");
     }
 
     let count = unsafe { detect_memory() };
+    unsafe {
+        get_vbe_info();
+    }
 
     panic!("Not ready for next stage");
     unsafe {
         load_gdt();
         next_stage(count);
     }
+    panic!("Returned back to stage 1");
 }
 
 /// Detects memory using int 0x15 with eax = 0xE820, returns number of entries read

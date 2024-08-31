@@ -14,20 +14,20 @@ pub fn print_char(c: u8) {
 
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         #[allow(unused_imports)]
         use core::fmt::Write as _;
         write!($crate::real_mode::BiosWriter, $($arg)*);
-    };
+    }};
 }
 
 #[macro_export]
 macro_rules! println {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         #[allow(unused_imports)]
         use core::fmt::Write as _;
         writeln!($crate::real_mode::BiosWriter, $($arg)*);
-    };
+    }};
 }
 
 pub struct BiosWriter;
