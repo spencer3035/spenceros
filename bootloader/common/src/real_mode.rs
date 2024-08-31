@@ -17,7 +17,7 @@ macro_rules! print {
     ($($arg:tt)*) => {{
         #[allow(unused_imports)]
         use core::fmt::Write as _;
-        write!($crate::real_mode::BiosWriter, $($arg)*);
+        write!($crate::real_mode::BiosWriter, $($arg)*).unwrap();
     }};
 }
 
@@ -26,7 +26,7 @@ macro_rules! println {
     ($($arg:tt)*) => {{
         #[allow(unused_imports)]
         use core::fmt::Write as _;
-        writeln!($crate::real_mode::BiosWriter, $($arg)*);
+        writeln!($crate::real_mode::BiosWriter, $($arg)*).unwrap();
     }};
 }
 

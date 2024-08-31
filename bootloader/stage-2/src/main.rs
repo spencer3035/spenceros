@@ -9,6 +9,15 @@ use core::arch::asm;
 
 static GDT_LONG: Gdt = Gdt::long_mode();
 
+use core::panic::PanicInfo;
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    println!("{info}");
+    loop {
+        unsafe { asm!("hlt") }
+    }
+}
+
 #[allow(dead_code)]
 #[repr(packed)]
 #[derive(Debug)]

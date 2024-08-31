@@ -3,7 +3,16 @@
 
 use core::arch::asm;
 
-use common::*;
+use common::{print, println};
+
+use core::panic::PanicInfo;
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    println!("PANIC: {info}");
+    loop {
+        unsafe { asm!("hlt") }
+    }
+}
 
 #[link_section = ".start"]
 #[no_mangle]

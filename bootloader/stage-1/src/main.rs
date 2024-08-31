@@ -1,11 +1,11 @@
-//#![cfg_attr(not(test), no_std)]
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![no_main]
+#![feature(const_trait_impl)]
+#![deny(unsafe_op_in_unsafe_fn)]
 
 use core::arch::asm;
 
 use common::gdt::*;
-use common::real_mode::BiosWriter;
 use common::*;
 use real_mode::hlt;
 
@@ -18,7 +18,7 @@ fn panic(info: &PanicInfo) -> ! {
     hlt();
 }
 
-use vbe::get_vbe_info;
+use vbe::enter_vbe_mode;
 pub mod vbe;
 
 #[link_section = ".start"]
@@ -36,7 +36,7 @@ pub extern "C" fn _start(_disk_number: u16) {
 
     let count = unsafe { detect_memory() };
     unsafe {
-        get_vbe_info();
+        enter_vbe_mode();
     }
 
     panic!("Not ready for next stage");
@@ -63,25 +63,27 @@ unsafe fn detect_memory() -> u16 {
     let mut count = 0;
     loop {
         count += 1;
-        asm!(
-            "int 0x15",
-            // TODO: Put this check outside and remove "fail_asm" call. This doesn't even work
-            // really
-            "jc fail_asm",
-            // https://wiki.osdev.org/Detecting_Memory_(x86)#BIOS_Function:_INT_0x15,_EAX_=_0xE820
-            // If success:
-            // Carry is clear
-            // check EAX is magic number
-            // EBX is nonzero, should be preserved to next call
-            // CL has number of bytes stored (probably 20)
-            // If end:
-            // ebx == 0 or carry flag is set
-            inout("di") di,
-            inout("eax") eax,
-            inout("ebx") ebx,
-            inout("ecx") ecx,
-            inout("edx") edx,
-        );
+        unsafe {
+            asm!(
+                "int 0x15",
+                // TODO: Put this check outside and remove "fail_asm" call. This doesn't even work
+                // really
+                "jc fail_asm",
+                // https://wiki.osdev.org/Detecting_Memory_(x86)#BIOS_Function:_INT_0x15,_EAX_=_0xE820
+                // If success:
+                // Carry is clear
+                // check EAX is magic number
+                // EBX is nonzero, should be preserved to next call
+                // CL has number of bytes stored (probably 20)
+                // If end:
+                // ebx == 0 or carry flag is set
+                inout("di") di,
+                inout("eax") eax,
+                inout("ebx") ebx,
+                inout("ecx") ecx,
+                inout("edx") edx,
+            );
+        }
 
         if eax != magic_number {
             panic!("bad eax mem");
@@ -171,11 +173,13 @@ unsafe fn enable_a20() {
     // enable A20-Line via IO-Port 92, might not work on all motherboards
     // Check if A20 is enabled
     let al: u8;
-    asm!(
-        "in {al}, 0x92",
-        //"test al, 2",
-        al = out(reg_byte) al
-    );
+    unsafe {
+        asm!(
+            "in {al}, 0x92",
+            //"test al, 2",
+            al = out(reg_byte) al
+        );
+    }
 
     if al != 2 {
         //println(b"A20 already enabled");
@@ -183,7 +187,9 @@ unsafe fn enable_a20() {
     }
 
     // Enable a20
-    asm!("or al, 2", "and al, 0xFE", "out 0x92, al",);
+    unsafe {
+        asm!("or al, 2", "and al, 0xFE", "out 0x92, al",);
+    }
 }
 
 /// Checks if CPUID exists or not
