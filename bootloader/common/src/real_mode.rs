@@ -1,11 +1,5 @@
 use core::arch::asm;
 
-use core::panic::PanicInfo;
-#[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    fail(b"panic");
-}
-
 /// Prints a single characetr to the screen
 #[inline]
 pub fn print_char(c: u8) {
@@ -15,6 +9,50 @@ pub fn print_char(c: u8) {
             "int 0x10",
             in("ax") ax,
         );
+    }
+}
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => {
+        #[allow(unused_imports)]
+        use core::fmt::Write as _;
+        write!($crate::real_mode::BiosWriter, $($arg)*);
+    };
+}
+
+#[macro_export]
+macro_rules! println {
+    ($($arg:tt)*) => {
+        #[allow(unused_imports)]
+        use core::fmt::Write as _;
+        writeln!($crate::real_mode::BiosWriter, $($arg)*);
+    };
+}
+
+pub struct BiosWriter;
+
+impl core::fmt::Write for BiosWriter {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        print_str(s);
+        Ok(())
+    }
+}
+
+fn print_str(s: &str) {
+    for c in s.chars() {
+        if c.is_ascii() {
+            if c == '\n' {
+                let ax = 0x0e00 | b'\r' as u16;
+                unsafe { asm!("int 0x10", in("ax") ax) }
+                let ax = 0x0e00 | b'\n' as u16;
+                unsafe { asm!("int 0x10", in("ax") ax) }
+            } else {
+                print_char(c as u8);
+            }
+        } else {
+            print_char(b'?')
+        }
     }
 }
 
@@ -111,13 +149,13 @@ pub fn print_dec(mut num: u16) {
 
 /// Prints a slice of characters to screen with \c\r at the end
 #[inline]
-pub fn println(chars: &[u8]) {
-    print(chars);
-    print(b"\r\n");
+pub fn printline(chars: &[u8]) {
+    print_chars(chars);
+    print_chars(b"\r\n");
 }
 
 /// Prints a slice of characters to screen in BIOS
-pub fn print(chars: &[u8]) {
+pub fn print_chars(chars: &[u8]) {
     for val in chars.iter() {
         print_char(*val);
     }
@@ -127,8 +165,8 @@ pub fn print(chars: &[u8]) {
 ///
 /// Should not be called with jump commands from assembly. Will not work unless called
 pub fn fail(code: &[u8]) -> ! {
-    print(b"Fail: ");
-    println(code);
+    print_chars(b"Fail: ");
+    printline(code);
     hlt()
 }
 
@@ -137,14 +175,13 @@ pub fn fail(code: &[u8]) -> ! {
 /// Should not be called with jump commands from assembly. Will not work unless called
 #[no_mangle]
 pub extern "C" fn fail_asm(code: &u8) -> ! {
-    print(b"Fail: ");
+    print_chars(b"Fail: ");
     print_char(*code);
     hlt()
 }
 
 /// Displays "Halt." and Halts CPU
 pub fn hlt() -> ! {
-    println(b"Halt.");
     loop {
         unsafe {
             asm!("hlt");

@@ -6,12 +6,19 @@ global_asm!(include_str!("boot.s"));
 use core::arch::asm;
 use core::arch::global_asm;
 
+use common::real_mode::{fail, hlt};
 use common::*;
 
 extern "C" {
     /// The address of this number is set in the link.ld file to be the first byte of the next
     /// section. We can use the address of this to transmute it to a function pointer and call it.
     static _second_stage_start: u8;
+}
+
+use core::panic::PanicInfo;
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    fail(b"panic");
 }
 
 #[no_mangle]

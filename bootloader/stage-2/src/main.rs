@@ -2,6 +2,8 @@
 #![no_main]
 
 use common::gdt::*;
+use common::protected_mode::hlt;
+use common::protected_mode::io::clear_screen;
 use common::*;
 use core::arch::asm;
 

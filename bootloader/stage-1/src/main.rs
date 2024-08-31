@@ -5,29 +5,41 @@
 use core::arch::asm;
 
 use common::gdt::*;
+use common::real_mode::BiosWriter;
 use common::*;
+use real_mode::hlt;
 
 static GDT_PROTECTED: Gdt = Gdt::protected_mode();
+
+use core::panic::PanicInfo;
+#[panic_handler]
+fn panic(info: &PanicInfo) -> ! {
+    println!("PANIC: {info}");
+    hlt();
+}
+
+mod write {}
 
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
+    println!("Starting stage 1");
+
     unsafe {
         enable_a20();
     }
 
     if !has_cpuid() {
-        fail(b"Doesn't have CPUID");
+        panic!("Doesn't have CPUID");
     }
 
     let count = unsafe { detect_memory() };
 
+    panic!("Not ready for next stage");
     unsafe {
         load_gdt();
         next_stage(count);
     }
-
-    fail(b"return from protected");
 }
 
 /// Detects memory using int 0x15 with eax = 0xE820, returns number of entries read
@@ -67,11 +79,11 @@ unsafe fn detect_memory() -> u16 {
         );
 
         if eax != magic_number {
-            fail(b"bad eax mem");
+            panic!("bad eax mem");
         }
 
         if ecx != 20 {
-            fail(b"mem offset bad");
+            panic!("mem offset bad");
         }
 
         // TODO: Also check carry is clear

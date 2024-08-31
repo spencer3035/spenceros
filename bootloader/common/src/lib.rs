@@ -6,21 +6,11 @@ use core::assert;
 
 use core::mem::size_of;
 
-#[cfg(all(feature = "real_mode", feature = "protected_mode"))]
-compile_error!("feature \"real_mode\" and \"protected_mode\" cannot be enabled at the same time");
-
 #[cfg(feature = "real_mode")]
 pub mod real_mode;
 
-#[cfg(feature = "real_mode")]
-pub use real_mode::*;
-
 #[cfg(feature = "protected_mode")]
 pub mod protected_mode;
-#[cfg(feature = "protected_mode")]
-pub use protected_mode::io::*;
-#[cfg(feature = "protected_mode")]
-pub use protected_mode::*;
 
 pub mod gdt;
 
@@ -35,7 +25,7 @@ pub const STAGE_0_START: usize = 0x7c00;
 /// Number of 512 byte sections stage 0 takes up
 pub const STAGE_0_SECTIONS: usize = 1;
 /// Number of 512 byte sections stage 1 takes up
-pub const STAGE_1_SECTIONS: usize = 2;
+pub const STAGE_1_SECTIONS: usize = 0x10;
 /// Number of 512 byte sections stage 2 takes up
 pub const STAGE_2_SECTIONS: usize = 0x10;
 /// Number of 512 byte sections stage 3 takes up
