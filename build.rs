@@ -64,6 +64,8 @@ fn build_elf(local_path: &Path, out_dir: &Path, bits: &NBits) -> PathBuf {
         NBits::Bits64 => "tuples/x86_64-unknown-kernel.json",
     };
     cmd.arg("install")
+        .arg("--color")
+        .arg("always")
         .arg("--path")
         .arg(local_path)
         .arg("--locked")
