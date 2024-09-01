@@ -18,6 +18,45 @@ macro_rules! check_vbe_ax {
     };
 }
 
+static mut FONT: [u8; 0x1000] = [0; 0x1000];
+/// Loads BIOS VGA font into static variable
+///
+/// SAFETY: Modifies static variable. Not thread safe
+unsafe fn get_vga_font() {
+    // ES:BP is address of font we want to save
+    let mut bp: u16;
+    let mut es: u16;
+    unsafe {
+        asm!(
+            // Save segment register, they get modified by bios call
+            "push			es",
+            // Ask BIOS to return VGA bitmap font location
+            //
+            // Returns pointer to font at ES:BP, as well as info in CX and DL we don't care about
+            "mov			ax, 1130h",
+            "mov			bh, 6",
+            "int			0x10",
+            // Save results
+            "mov			{0:x}, bp",
+            "mov			{1:x}, es",
+            // Reset segment register
+            "pop			es",
+            out(reg) bp,
+            out(reg) es,
+        );
+    }
+
+    // Convert segmented addressing to linear address
+    let address = (16 * (es as usize) + bp as usize) as *const u8;
+
+    // Save font
+    for ii in 0..0x1000 {
+        unsafe {
+            FONT[ii] = address.add(ii).read();
+        }
+    }
+}
+
 /// Enters the best fit VBE mode
 ///
 /// SAFETY: Writes to static variables, can't be used accross threads
@@ -29,24 +68,52 @@ pub unsafe fn enter_vbe_mode() -> (VbeInfoBlock, VesaModeInfoBlock) {
         "VesaModeInfoBlock bad size"
     );
 
+    unsafe {
+        get_vga_font();
+    }
+
     let (info, mode) = unsafe { set_best_vbe_mode() };
 
     //mode.debug();
 
     //mode.set_pixel(10, 0, 0xff);
-    for ii in 0..500 {
-        for jj in 0..500 {
-            mode.set_pixel(ii, jj, &Color::blue());
-        }
-    }
+    //for ii in 0..500 {
+    //    for jj in 0..500 {
+    //        mode.set_pixel(ii, jj, &Color::blue());
+    //    }
+    //}
 
-    for ii in 0..500 {
-        mode.set_pixel(ii, ii, &Color::red());
-    }
+    //for ii in 0..500 {
+    //    mode.set_pixel(ii, ii, &Color::red());
+    //}
 
+    print_char(b'!', &mode);
     loop {}
 
     (info, mode)
+}
+
+pub struct Screen {
+    width: u16,
+    height: u16,
+    depth: u8,
+    line_bytes: u16,
+    pixel_bytes: u8,
+}
+
+fn print_char(c: u8, mode: &VesaModeInfoBlock) {
+    let offset = c as usize * 16;
+    for ii in 0..16 {
+        let mut mask = unsafe { FONT[offset + ii] };
+        let mut shift = 0;
+        while mask != 0 {
+            if mask & 1 != 0 {
+                mode.set_pixel(8 - shift, ii as u16, &Color::white());
+            }
+            shift += 1;
+            mask >>= 1;
+        }
+    }
 }
 
 /// Loads the static [`VbeInfoBlock`]
