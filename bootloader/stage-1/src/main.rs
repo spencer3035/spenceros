@@ -35,9 +35,7 @@ pub extern "C" fn _start(_disk_number: u16) {
     }
 
     let count = unsafe { detect_memory() };
-    unsafe {
-        init_graphical();
-    }
+    init_graphical();
 
     panic!("Not ready for next stage");
     unsafe {

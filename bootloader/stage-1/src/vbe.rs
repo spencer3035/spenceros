@@ -101,7 +101,7 @@ impl Screen {
 /// Enters the best fit VBE mode
 ///
 /// SAFETY: Writes to static variables, can't be used accross threads
-pub unsafe fn init_graphical() -> Screen {
+pub fn init_graphical() -> Screen {
     let screen = vbe_impl::init();
     screen.print_char(b'A', 0, 0);
     screen.print_char(b'B', 1, 0);
