@@ -50,19 +50,24 @@ pub struct Screen {
     height: u16,
     depth: u8,
     line_bytes: u16,
+    // TODO: Add double buffer?
     framebuffer: *mut u8,
     font: &'static [u8; 0x1000],
+    //char_index: usize,
 }
 
 impl Screen {
-    pub fn print_char(&self, c: u8) {
+    /// Prints a given ascii char at x,y in units of number of characters
+    pub fn print_char(&self, c: u8, x: u16, y: u16) {
         let offset = c as usize * 16;
         for ii in 0..16 {
             let mut mask = self.font[offset + ii];
             let mut shift = 0;
             while mask != 0 {
                 if mask & 1 != 0 {
-                    self.set_pixel(8 - shift, ii as u16, &Color::white());
+                    let x_px = 8 * x + 8 - shift;
+                    let y_px = 16 * y + ii as u16;
+                    self.set_pixel(x_px, y_px, &Color::white());
                 }
                 shift += 1;
                 mask >>= 1;
@@ -105,7 +110,7 @@ impl Screen {
 /// SAFETY: Writes to static variables, can't be used accross threads
 pub unsafe fn init_graphical() -> Screen {
     let screen = vbe_impl::init();
-    screen.print_char(b'!');
-
+    screen.print_char(b'A', 0, 0);
+    screen.print_char(b'B', 1, 0);
     loop {}
 }

@@ -6,8 +6,8 @@
 use core::arch::asm;
 
 use common::gdt::*;
+use common::real_mode::hlt;
 use common::*;
-use real_mode::hlt;
 
 static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
