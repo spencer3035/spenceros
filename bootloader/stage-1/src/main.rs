@@ -18,7 +18,7 @@ fn panic(info: &PanicInfo) -> ! {
     hlt();
 }
 
-use vbe::enter_vbe_mode;
+use vbe::init_graphical;
 pub mod vbe;
 
 #[link_section = ".start"]
@@ -36,7 +36,7 @@ pub extern "C" fn _start(_disk_number: u16) {
 
     let count = unsafe { detect_memory() };
     unsafe {
-        enter_vbe_mode();
+        init_graphical();
     }
 
     panic!("Not ready for next stage");
