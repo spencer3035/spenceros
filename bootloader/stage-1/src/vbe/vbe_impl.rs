@@ -1,4 +1,8 @@
+use common::println;
+use helper_struct::RaceyCell;
+
 use super::{Color, Screen};
+use core::mem::MaybeUninit;
 use core::{arch::asm, ptr::addr_of, ptr::addr_of_mut};
 
 pub fn init() -> Screen {
@@ -8,17 +12,17 @@ pub fn init() -> Screen {
         256,
         "VesaModeInfoBlock bad size"
     );
-    let (info, mode) = unsafe {
+    unsafe {
         get_vga_font();
-        set_best_vbe_mode()
-    };
+    }
+    let mode = set_best_vbe_mode();
 
     Screen {
         width: mode.width,
         height: mode.height,
         depth: mode.bits_per_pixel,
         line_bytes: mode.bytes_per_scan_line,
-        framebuffer: mode.get_frame_vram_addr(),
+        framebuffer: mode.framebuffer as *mut u8,
         font: unsafe { addr_of!(FONT).as_ref().unwrap() },
     }
 }
@@ -62,10 +66,37 @@ unsafe fn get_vga_font() {
     }
 }
 
+use core::cell::RefCell;
 // TODO: Change to refcel
-static mut VBE_BLOCK: VbeInfoBlock = VbeInfoBlock::null();
-static mut VBE_MODE: VesaModeInfoBlock = VesaModeInfoBlock::null();
 
+pub mod helper_struct {
+    use core::{borrow::Borrow, cell::UnsafeCell};
+
+    pub struct RaceyCell<T>(UnsafeCell<T>);
+
+    impl<T> RaceyCell<T> {
+        pub const fn new(v: T) -> Self {
+            Self(UnsafeCell::new(v))
+        }
+
+        /// Gets a mutable reference
+        ///
+        /// SAFETY: Can only be called when no other references exist
+        pub unsafe fn get_mut(&self) -> &mut T {
+            unsafe { &mut *self.0.get() }
+        }
+
+        /// Gets a reference to the data
+        pub fn get(&self) -> &T {
+            // SAFETY: We don't use the mutable pointer and the undelying data in gaurenteed to be
+            // a valid pointer because that is the only way to construct it.
+            unsafe { &*(self.0.get() as *const T) }
+        }
+    }
+
+    unsafe impl<T: Send> Send for RaceyCell<T> {}
+    unsafe impl<T: Sync> Sync for RaceyCell<T> {}
+}
 /// Checks that the ax value indicates return success for VBE function calls. Panics if not success
 macro_rules! check_vbe_ax {
     ($ax:ident, $($args:tt)*) => {
@@ -79,155 +110,73 @@ macro_rules! check_vbe_ax {
     };
 }
 
-/// Loads the static [`VbeInfoBlock`]
-///
-/// SAFETY: Sets and returns reference to static VbeInfoBlock, can't be used across threads
-unsafe fn load_info_block() -> VbeInfoBlock {
-    let vbe_block: *mut VbeInfoBlock = addr_of_mut!(VBE_BLOCK);
-    // Load VBE Info block
-    {
-        // SAFETY: Mutates VBE_BLOCK, and VBE_BLOCK is marked as mutable
-        unsafe {
-            let mut ax: u16 = 0x4f00;
-            asm!(
-                "int 0x10",
-                inout("ax") ax,
-                in("di") vbe_block
-            );
-
-            check_vbe_ax!(ax, "VBE load fail code");
-        }
-    }
-
-    unsafe {
-        let blk = vbe_block.read();
-        blk.check().unwrap();
-        blk
-    }
-}
-
-/// Gets the best vbe mode given width, and height.
-///
-/// Returns mode number and structure of the mode
-///
-/// SAFETY: Modifies static variables, can not be used across threads
-unsafe fn get_best_mode(
-    width: u16,
-    height: u16,
-    delpth: u8,
-    info: &VbeInfoBlock,
-) -> (VesaModeInfoBlock, u16) {
-    // TODO: Switch to maybe uninit and declare init after int 0x10 call
-    let vbe_mode = addr_of_mut!(VBE_MODE);
-
-    let modes: *const u16 = info.video_mode_ptr as *const u16;
+/// Gets the best vbe mode given desired width, height, depth, and a list of supported mode ids
+fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> VesaModeInfoSimple {
     let mut diff = u16::MAX;
     let mut best_mode = 0;
 
-    let mut num_modes = 0;
-    // This could probably be smaller
-    let max_modes = 0x100;
-    loop {
-        let mode_id: u16 = unsafe { modes.add(num_modes).read() };
-        // Last mode
-        if mode_id == 0xffff {
-            break;
-        }
-        num_modes += 1;
+    let mut vbe_mode = VesaModeInfoSimple::null();
 
-        // Read mode to structure
-        let mut ax = 0x4f01;
-        unsafe {
-            asm!(
-                "int 0x10",
-                inout("ax") ax,
-                in("cx") mode_id,
-                in("di") vbe_mode,
-            );
-        }
-        check_vbe_ax!(ax, "VBE mode fail");
-
-        let vbe_mode: VesaModeInfoBlock = unsafe {
-            let vbe_mode = vbe_mode.read();
-            vbe_mode.check().unwrap();
-            vbe_mode
-        };
-
-        // Check it is a mode we want
-        // Packed pixel or direct color
-        let memory_model_works = vbe_mode.memory_model == 4 || vbe_mode.memory_model == 6;
-        let required_flags =
-            SUPPORTED_BY_HARDWARE | LINEAR_FRAME_BUFFER | NO_VGA_COMPAT | GRAPICS_MODE;
-        let has_flags = vbe_mode.mode_attributes & required_flags == required_flags;
-        let good_mode = memory_model_works && has_flags && vbe_mode.bits_per_pixel == delpth;
-        if !good_mode {
+    for mode_id in modes.iter() {
+        if let Err(_) = vbe_mode.load(*mode_id) {
             continue;
         }
-
         // Check the residual
         let mode_diff = vbe_mode.width.abs_diff(width) + vbe_mode.height.abs_diff(height);
-
-        if mode_diff <= diff {
+        if vbe_mode.bits_per_pixel == depth && mode_diff <= diff {
             diff = mode_diff;
-            best_mode = mode_id;
-        }
-
-        if num_modes > max_modes {
-            panic!("last mode not found");
+            best_mode = *mode_id;
         }
     }
 
-    if num_modes == 0 || diff == u16::MAX {
+    if modes.is_empty() || diff == u16::MAX {
         panic!("no VBE modes found");
     }
 
-    // Read mode to structure
-    let mut ax = 0x4f01;
-    unsafe {
-        asm!(
-            "int 0x10",
-            inout("ax") ax,
-            in("cx") best_mode,
-            in("di") vbe_mode,
-        );
+    if let Err(e) = vbe_mode.load(best_mode) {
+        panic!("Couldn't load VBE mode: {e:?}");
     }
-    check_vbe_ax!(ax, "VBE mode fail");
 
-    unsafe {
-        let blk = vbe_mode.read();
-        blk.check().unwrap();
-        (blk, best_mode)
-    }
+    // Read mode to structure
+    vbe_mode.load(best_mode);
+    vbe_mode
 }
 
 /// SAFETY: Can only be called by one thread at a time, contains mutable static information
-unsafe fn set_best_vbe_mode() -> (VbeInfoBlock, VesaModeInfoBlock) {
+fn set_best_vbe_mode() -> VesaModeInfoSimple {
     // Get the best mode relative to these target numbers
     // TODO: Get these numbers from EDID: https://wiki.osdev.org/EDID
     //let (width, height) = (1920, 1080, 24);
     let (width, height, depth) = (1280, 720, 24);
 
-    unsafe {
-        let info_block = load_info_block();
-        let (mode_block, mode_id) = get_best_mode(width, height, depth, &info_block);
+    let vbe_block = VbeInfoBlock::new();
+    let modes = vbe_block.get_modes();
 
-        const USE_LINEAR_FRAME_BUFFER: u16 = 0x4000;
-        const USE_CRTC_INFO_BLOCK: u16 = 1 << 10;
-        // Set the mode
+    println!("modes = {modes:?}");
+
+    // RefCell immutable
+    let mode = get_best_mode(width, height, depth, modes);
+
+    println!("Best mode {mode:?}");
+
+    const USE_LINEAR_FRAME_BUFFER: u16 = 0x4000;
+    const USE_CRTC_INFO_BLOCK: u16 = 1 << 10;
+    // Set the mode
+    unsafe {
         let mut ax = 0x4f02;
         asm!(
             "int 0x10",
             inout("ax") ax,
-            in("bx") mode_id | USE_LINEAR_FRAME_BUFFER
+            in("bx") mode.mode_id | USE_LINEAR_FRAME_BUFFER
             // in("bx") mode_id | USE_LINEAR_FRAME_BUFFER | USE_CRTC_INFO_BLOCK
             // in("di") &CRTCInfoBlock
         );
         // This doesn't display properly if the function succeeds, if it failes it presumibly would
         // display correctly because the mode would be the same.
-        check_vbe_ax!(ax, "VBE load fail code");
-
-        (info_block, mode_block)
+        check_vbe_ax!(ax, "VBE load fail code : 0x{ax:x}");
     }
+
+    mode
 }
 
 #[allow(dead_code)]
@@ -251,6 +200,20 @@ pub struct VbeInfoBlock {
 }
 
 impl VbeInfoBlock {
+    fn get_modes(&self) -> &[u16] {
+        let mode_ptr = self.video_mode_ptr as *const u16;
+        let max_modes = 0x100;
+        let mut length = 0;
+        while unsafe { mode_ptr.add(length).read() != 0xffff } && length < max_modes {
+            length += 1;
+        }
+
+        if length == max_modes {
+            panic!("Didn't hit end of modes list");
+        }
+
+        unsafe { core::slice::from_raw_parts(mode_ptr, length) }
+    }
     const fn null() -> VbeInfoBlock {
         VbeInfoBlock {
             signature: [0; 4],
@@ -267,6 +230,33 @@ impl VbeInfoBlock {
             oem_data: [0; 256],
         }
     }
+
+    /// Loads VBE info from block
+    fn load(&mut self) {
+        /// Modifies the content of self
+        unsafe {
+            let mut ax: u16 = 0x4f00;
+            asm!(
+                "int 0x10",
+                inout("ax") ax,
+                in("di") self
+            );
+            check_vbe_ax!(ax, "VBE load fail code 0x{ax:x}");
+        }
+
+        self.check().unwrap();
+    }
+
+    /// Loads VBE into new structure
+    fn new() -> Self {
+        let mut res: MaybeUninit<Self> = MaybeUninit::uninit();
+        unsafe {
+            res.assume_init_mut().load();
+            res.assume_init()
+        }
+    }
+
+    /// Checks if block is valid
     fn check(&self) -> Result<(), VbeError> {
         if &self.signature != b"VESA" {
             // Check signature
@@ -275,6 +265,11 @@ impl VbeInfoBlock {
             // Check version
             Err(VbeError::NotVerson3)
         } else if self.capabillities != [1, 0, 0, 0] {
+            common::println!("self={:?}", self.capabillities);
+            common::println!("arr ={:?}", [1, 0, 0, 0]);
+            for (ii, val) in self.capabillities.iter().enumerate() {
+                common::println!("{ii}: {val}");
+            }
             // Check capabilities are as expected
             Err(VbeError::BadCapabilities)
         } else {
@@ -316,6 +311,74 @@ pub struct VbeDisplay<'a> {
 impl core::fmt::Display for VbeInfoBlock {
     fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         todo!()
+    }
+}
+
+#[derive(Debug)]
+#[repr(C)]
+pub struct VesaModeInfoSimple {
+    mode_id: u16,
+    /// Number of bytes to get next horizontal row
+    bytes_per_scan_line: u16,
+    /// How many pixels wide the screen is
+    width: u16,
+    /// How many pixels high the screen is
+    height: u16,
+    /// How many bits per pixes, should be 4 or 6
+    bits_per_pixel: u8,
+    /// Start address of the framebuffer
+    framebuffer: *mut u8,
+    // TODO: Put color mask
+}
+
+impl VesaModeInfoSimple {
+    const fn null() -> VesaModeInfoSimple {
+        VesaModeInfoSimple {
+            mode_id: 0,
+            bytes_per_scan_line: 0,
+            width: 0,
+            height: 0,
+            bits_per_pixel: 0,
+            framebuffer: 0 as *mut u8,
+        }
+    }
+    fn load(&mut self, mode_id: u16) -> Result<(), VbeError> {
+        // Read mode to structure
+        //
+        // SAFETY: Assembly modifies vbe_mode_def, needs to remain mutable to maintain correctness
+        let mut vbe_mode_def = VesaModeInfoBlock::null();
+        let mut ax = 0x4f01;
+        unsafe {
+            asm!(
+                "int 0x10",
+                inout("ax") ax,
+                in("cx") mode_id,
+                in("di") &vbe_mode_def,
+            );
+        }
+        check_vbe_ax!(ax, "VBE mode fail");
+
+        // Check it is a mode we want
+        // Packed pixel or direct color
+        let memory_model_works = vbe_mode_def.memory_model == 4 || vbe_mode_def.memory_model == 6;
+        let required_flags =
+            SUPPORTED_BY_HARDWARE | LINEAR_FRAME_BUFFER | NO_VGA_COMPAT | GRAPICS_MODE;
+        let has_flags = vbe_mode_def.mode_attributes & required_flags == required_flags;
+        let good_mode = memory_model_works && has_flags;
+        if !good_mode {
+            return Err(VbeError::ModeNotGood);
+        }
+
+        *self = VesaModeInfoSimple {
+            mode_id,
+            bits_per_pixel: vbe_mode_def.bits_per_pixel,
+            bytes_per_scan_line: vbe_mode_def.bytes_per_scan_line,
+            width: vbe_mode_def.width,
+            height: vbe_mode_def.height,
+            framebuffer: vbe_mode_def.framebuffer as *mut u8,
+        };
+
+        Ok(())
     }
 }
 
@@ -401,45 +464,6 @@ impl VesaModeInfoBlock {
         // TODO: Check for validity
         Ok(())
     }
-    #[inline]
-    fn get_frame_vram_addr(&self) -> *mut u8 {
-        if self.mode_attributes & LINEAR_FRAME_BUFFER != 0 {
-            self.framebuffer as *mut u8
-        } else {
-            panic!("Graphics doesn't have frame buffer");
-        }
-    }
-
-    #[inline]
-    fn get_pixel_address(&self, x: u16, y: u16) -> *mut u8 {
-        assert!(self.bits_per_pixel % 8 == 0);
-
-        let y_offset = y as usize * self.linear_bytes_per_scan_line as usize;
-        let x_offset = x as usize * (self.bits_per_pixel as usize / 8);
-        let offset = y_offset + x_offset;
-
-        unsafe { self.get_frame_vram_addr().add(offset) }
-    }
-
-    /// Sets the given pixel a color, panics if x or y is out of range
-    pub fn set_pixel(&self, x: u16, y: u16, color: &Color) {
-        if x >= self.width || y > self.height {
-            panic!("requested pixel out of range: ({x},{y})");
-        }
-
-        let addr = self.get_pixel_address(x, y);
-        unsafe {
-            match self.bits_per_pixel {
-                24 => {
-                    addr.add(0).write(color.b);
-                    addr.add(1).write(color.g);
-                    addr.add(2).write(color.r);
-                }
-                // TODO: Implement 32 bpp and 16 bpp modes
-                n => panic!("{n} bits per pixel not supported"),
-            }
-        }
-    }
     const fn null() -> VesaModeInfoBlock {
         VesaModeInfoBlock {
             mode_attributes: 0,
@@ -513,6 +537,7 @@ impl core::fmt::Display for VesaModeInfoBlock {
 
 #[derive(Debug)]
 pub enum VbeError {
+    ModeNotGood,
     SignatureNotValid,
     NotVerson3,
     BadCapabilities,

@@ -14,11 +14,23 @@ pub mod protected_mode;
 
 pub mod gdt;
 
-// Info passed to the kernel
+/// Info passed to the kernel
 #[repr(C)]
 pub struct BiosInfo {
     pub memory_map_start: *const u8,
     pub memory_map_count: usize,
+    pub framebuffer: FrameBufferInfo,
+}
+
+/// Information about the framebuffer to write to the screen
+#[repr(C)]
+pub struct FrameBufferInfo {
+    pub width: u16,
+    pub height: u16,
+    pub depth: u8,
+    pub line_bytes: u16,
+    pub framebuffer: *mut u8,
+    pub font: &'static [u8; 0x1000],
 }
 
 /// The start of the first stage in memory, defined by BIOS
@@ -26,7 +38,7 @@ pub const STAGE_0_START: usize = 0x7c00;
 /// Number of 512 byte sections stage 0 takes up
 pub const STAGE_0_SECTIONS: usize = 1;
 /// Number of 512 byte sections stage 1 takes up
-pub const STAGE_1_SECTIONS: usize = 0x20;
+pub const STAGE_1_SECTIONS: usize = 0x30;
 /// Number of 512 byte sections stage 2 takes up
 pub const STAGE_2_SECTIONS: usize = 0x10;
 /// Number of 512 byte sections stage 3 takes up

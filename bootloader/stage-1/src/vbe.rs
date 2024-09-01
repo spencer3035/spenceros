@@ -8,43 +8,36 @@ pub struct Color {
 }
 
 impl Color {
+    pub const RED: Color = Color {
+        r: 0xff,
+        g: 0,
+        b: 0,
+    };
+
+    pub const GREEN: Color = Color {
+        r: 0,
+        g: 0xff,
+        b: 0,
+    };
+
+    pub const BLUE: Color = Color {
+        r: 0,
+        g: 0,
+        b: 0xff,
+    };
+
+    pub const WHITE: Color = Color {
+        r: 0xff,
+        g: 0xff,
+        b: 0xff,
+    };
+
     fn new(r: u8, g: u8, b: u8) -> Self {
         Color { r, g, b }
     }
-
-    const fn white() -> Self {
-        Color {
-            r: 0xff,
-            g: 0xff,
-            b: 0xff,
-        }
-    }
-
-    const fn red() -> Self {
-        Color {
-            r: 0xff,
-            g: 0,
-            b: 0,
-        }
-    }
-
-    const fn green() -> Self {
-        Color {
-            r: 0,
-            g: 0xff,
-            b: 0,
-        }
-    }
-
-    const fn blue() -> Self {
-        Color {
-            r: 0,
-            g: 0,
-            b: 0xff,
-        }
-    }
 }
 
+#[repr(C)]
 pub struct Screen {
     width: u16,
     height: u16,
@@ -67,7 +60,7 @@ impl Screen {
                 if mask & 1 != 0 {
                     let x_px = 8 * x + 8 - shift;
                     let y_px = 16 * y + ii as u16;
-                    self.set_pixel(x_px, y_px, &Color::white());
+                    self.set_pixel(x_px, y_px, &Color::WHITE);
                 }
                 shift += 1;
                 mask >>= 1;
