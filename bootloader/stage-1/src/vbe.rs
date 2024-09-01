@@ -1,9 +1,11 @@
 use common::println;
 use core::{arch::asm, ptr::addr_of_mut};
 
+// TODO: Change to refcel
 static mut VBE_BLOCK: VbeInfoBlock = VbeInfoBlock::null();
 static mut VBE_MODE: VesaModeInfoBlock = VesaModeInfoBlock::null();
 
+/// Checks that the ax value indicates return success for VBE function calls. Panics if not success
 macro_rules! check_vbe_ax {
     ($ax:ident, $($args:tt)*) => {
             let ah = $ax >> 8;
@@ -27,7 +29,24 @@ pub unsafe fn enter_vbe_mode() -> (VbeInfoBlock, VesaModeInfoBlock) {
         "VesaModeInfoBlock bad size"
     );
 
-    unsafe { set_best_vbe_mode() }
+    let (info, mode) = unsafe { set_best_vbe_mode() };
+
+    //mode.debug();
+
+    //mode.set_pixel(10, 0, 0xff);
+    for ii in 0..500 {
+        for jj in 0..500 {
+            mode.set_pixel(ii, jj, &Color::blue());
+        }
+    }
+
+    for ii in 0..500 {
+        mode.set_pixel(ii, ii, &Color::red());
+    }
+
+    loop {}
+
+    (info, mode)
 }
 
 /// Loads the static [`VbeInfoBlock`]
@@ -62,7 +81,12 @@ unsafe fn load_info_block() -> VbeInfoBlock {
 /// Returns mode number and structure of the mode
 ///
 /// SAFETY: Modifies static variables, can not be used across threads
-unsafe fn get_best_mode(width: u16, height: u16, info: &VbeInfoBlock) -> (VesaModeInfoBlock, u16) {
+unsafe fn get_best_mode(
+    width: u16,
+    height: u16,
+    delpth: u8,
+    info: &VbeInfoBlock,
+) -> (VesaModeInfoBlock, u16) {
     // TODO: Switch to maybe uninit and declare init after int 0x10 call
     let vbe_mode = addr_of_mut!(VBE_MODE);
 
@@ -99,21 +123,27 @@ unsafe fn get_best_mode(width: u16, height: u16, info: &VbeInfoBlock) -> (VesaMo
             vbe_mode
         };
 
-        // Check the residual
-        let mode_diff = vbe_mode.width.abs_diff(width) + vbe_mode.height.abs_diff(height);
-        let good_mode = vbe_mode.memory_model == 4 || vbe_mode.memory_model == 6;
+        //if vbe_mode.bits_per_pixel == delpth {
+        //    println!("{vbe_mode}");
+        //}
 
+        // Check it is a mode we want
+        // Packed pixel or direct color
+        let memory_model_works = vbe_mode.memory_model == 4 || vbe_mode.memory_model == 6;
+        let required_flags =
+            (SUPPORTED_BY_HARDWARE | LINEAR_FRAME_BUFFER | NO_VGA_COMPAT | GRAPICS_MODE);
+        let has_flags = vbe_mode.mode_attributes & required_flags == required_flags;
+        let good_mode = memory_model_works && has_flags && vbe_mode.bits_per_pixel == delpth;
         if !good_mode {
             continue;
         }
 
-        if mode_diff < diff {
+        // Check the residual
+        let mode_diff = vbe_mode.width.abs_diff(width) + vbe_mode.height.abs_diff(height);
+
+        if mode_diff <= diff {
             diff = mode_diff;
             best_mode = mode_id;
-        }
-
-        if diff == 0 {
-            break;
         }
 
         if num_modes > max_modes {
@@ -125,9 +155,17 @@ unsafe fn get_best_mode(width: u16, height: u16, info: &VbeInfoBlock) -> (VesaMo
         panic!("no VBE modes found");
     }
 
+    // Read mode to structure
+    let mut ax = 0x4f01;
     unsafe {
-        println!("Best mode = {}", vbe_mode.read());
+        asm!(
+            "int 0x10",
+            inout("ax") ax,
+            in("cx") best_mode,
+            in("di") vbe_mode,
+        );
     }
+    check_vbe_ax!(ax, "VBE mode fail");
 
     unsafe {
         let blk = vbe_mode.read();
@@ -140,24 +178,26 @@ unsafe fn get_best_mode(width: u16, height: u16, info: &VbeInfoBlock) -> (VesaMo
 unsafe fn set_best_vbe_mode() -> (VbeInfoBlock, VesaModeInfoBlock) {
     // Get the best mode relative to these target numbers
     // TODO: Get these numbers from EDID: https://wiki.osdev.org/EDID
-    let width = 720;
-    let height = 480;
+    //let (width, height) = (1920, 1080, 24);
+    let (width, height, depth) = (1280, 720, 24);
 
     unsafe {
         let info_block = load_info_block();
-        let (mode_block, mode_id) = get_best_mode(width, height, &info_block);
+        let (mode_block, mode_id) = get_best_mode(width, height, depth, &info_block);
 
         const USE_LINEAR_FRAME_BUFFER: u16 = 0x4000;
         const USE_CRTC_INFO_BLOCK: u16 = 1 << 10;
         // Set the mode
         let mut ax = 0x4f02;
         asm!(
-        "int 0x10",
-        inout("ax") ax,
-        in("bx") mode_id | USE_LINEAR_FRAME_BUFFER
-        // in("bx") mode_id | USE_LINEAR_FRAME_BUFFER | USE_CRTC_INFO_BLOCK
-        // in("di") &CRTCInfoBlock
+            "int 0x10",
+            inout("ax") ax,
+            in("bx") mode_id | USE_LINEAR_FRAME_BUFFER
+            // in("bx") mode_id | USE_LINEAR_FRAME_BUFFER | USE_CRTC_INFO_BLOCK
+            // in("di") &CRTCInfoBlock
         );
+        // This doesn't display properly if the function succeeds, if it failes it presumibly would
+        // display correctly because the mode would be the same.
         check_vbe_ax!(ax, "VBE load fail code");
 
         (info_block, mode_block)
@@ -253,9 +293,11 @@ impl core::fmt::Display for VbeInfoBlock {
     }
 }
 
+#[derive(Debug)]
 #[allow(dead_code)]
-#[repr(C, align(16))]
+#[repr(C, packed)]
 pub struct VesaModeInfoBlock {
+    // ** Manditory for all VBE revisions
     mode_attributes: u16,
     window_a: u8,
     window_b: u8,
@@ -264,18 +306,24 @@ pub struct VesaModeInfoBlock {
     segment_a: u16,
     segment_b: u16,
     win_func_ptr: u32,
-    pitch: u16,
+    // ** Manditory for VBE 1.2 and above
+    /// Number of bytes used per pixel
+    bytes_per_scan_line: u16,
+    /// How many pixels wide the screen is
     width: u16,
+    /// How many pixels high the screen is
     height: u16,
     w_char: u8,
     y_char: u8,
     planes: u8,
+    /// How many bits per pixes, should be 4 or 6
     bits_per_pixel: u8,
     banks: u8,
     memory_model: u8,
     bank_size: u8,
     image_pages: u8,
     reserved0: u8,
+    // ** Direct color fields for memory models 6 and 7 **
     red_mask: u8,
     red_position: u8,
     green_mask: u8,
@@ -285,16 +333,131 @@ pub struct VesaModeInfoBlock {
     reserved_mask: u8,
     reserved_position: u8,
     direct_color_attributes: u8,
+    // ** Mandatory information for VBE 2.0 and above
+    /// Start address of the framebuffer
     framebuffer: u32,
     off_screen_mem_off: u32,
     off_screen_mem_size: u16,
-    reserved1: [u8; 206],
+    // ** Mandatory information for VBE 3.0 and above
+    linear_bytes_per_scan_line: u16,
+    bank_images_pages: u8,
+    linear_images_pages: u8,
+    linear_red_mask_size: u8,
+    linear_red_field_pos: u8,
+    linear_green_mask_size: u8,
+    linear_green_field_pos: u8,
+    linear_blue_mask_size: u8,
+    linear_blue_field_pos: u8,
+    linear_rsv_mask_size: u8,
+    linear_rsv_field_pos: u8,
+    max_pixel_clock: u32,
+    // TODO: Spec says this should be 189
+    reserved1: [u8; 190],
+}
+
+/// Mode is suported by hardware
+const SUPPORTED_BY_HARDWARE: u16 = 1 << 0;
+/// TTY Output supoprted by BIOS
+const TTY_BIOS_OUT: u16 = 1 << 2;
+/// Color mode is enabled
+const COLOR_MODE: u16 = 1 << 3;
+/// Graphics mode, not text mode
+const GRAPICS_MODE: u16 = 1 << 4;
+/// Doesn't have VGA compatability
+const NO_VGA_COMPAT: u16 = 1 << 5;
+/// Has VGA compatible windowed memory
+const WINDOWED_MEMORY: u16 = 1 << 6;
+/// Has linear frame buffer
+const LINEAR_FRAME_BUFFER: u16 = 1 << 7;
+
+#[derive(Debug, Clone)]
+struct Color {
+    r: u8,
+    g: u8,
+    b: u8,
+}
+
+impl Color {
+    fn new(r: u8, g: u8, b: u8) -> Self {
+        Color { r, g, b }
+    }
+
+    const fn white() -> Self {
+        Color {
+            r: 0xff,
+            g: 0xff,
+            b: 0xff,
+        }
+    }
+
+    const fn red() -> Self {
+        Color {
+            r: 0xff,
+            g: 0,
+            b: 0,
+        }
+    }
+
+    const fn green() -> Self {
+        Color {
+            r: 0,
+            g: 0xff,
+            b: 0,
+        }
+    }
+
+    const fn blue() -> Self {
+        Color {
+            r: 0,
+            g: 0,
+            b: 0xff,
+        }
+    }
 }
 
 impl VesaModeInfoBlock {
     fn check(&self) -> Result<(), VbeError> {
         // TODO: Check for validity
         Ok(())
+    }
+    #[inline]
+    fn get_frame_vram_addr(&self) -> *mut u8 {
+        if self.mode_attributes & LINEAR_FRAME_BUFFER != 0 {
+            self.framebuffer as *mut u8
+        } else {
+            panic!("Graphics doesn't have frame buffer");
+        }
+    }
+
+    #[inline]
+    fn get_pixel_address(&self, x: u16, y: u16) -> *mut u8 {
+        assert!(self.bits_per_pixel % 8 == 0);
+
+        let y_offset = y as usize * self.linear_bytes_per_scan_line as usize;
+        let x_offset = x as usize * (self.bits_per_pixel as usize / 8);
+        let offset = y_offset + x_offset;
+
+        unsafe { self.get_frame_vram_addr().add(offset) }
+    }
+
+    /// Sets the given pixel a color, panics if x or y is out of range
+    pub fn set_pixel(&self, x: u16, y: u16, color: &Color) {
+        if x >= self.width || y > self.height {
+            panic!("requested pixel out of range: ({x},{y})");
+        }
+
+        let addr = self.get_pixel_address(x, y);
+        unsafe {
+            match self.bits_per_pixel {
+                24 => {
+                    addr.add(0).write(color.b);
+                    addr.add(1).write(color.g);
+                    addr.add(2).write(color.r);
+                }
+                // TODO: Implement 32 bpp and 16 bpp modes
+                n => panic!("{n} bits per pixel not supported"),
+            }
+        }
     }
     const fn null() -> VesaModeInfoBlock {
         VesaModeInfoBlock {
@@ -306,7 +469,7 @@ impl VesaModeInfoBlock {
             segment_a: 0,
             segment_b: 0,
             win_func_ptr: 0,
-            pitch: 0,
+            bytes_per_scan_line: 0,
             width: 0,
             height: 0,
             w_char: 0,
@@ -330,19 +493,33 @@ impl VesaModeInfoBlock {
             framebuffer: 0,
             off_screen_mem_off: 0,
             off_screen_mem_size: 0,
-            reserved1: [0; 206],
+            linear_bytes_per_scan_line: 0,
+            bank_images_pages: 0,
+            linear_images_pages: 0,
+            linear_red_mask_size: 0,
+            linear_red_field_pos: 0,
+            linear_green_mask_size: 0,
+            linear_green_field_pos: 0,
+            linear_blue_mask_size: 0,
+            linear_blue_field_pos: 0,
+            linear_rsv_mask_size: 0,
+            linear_rsv_field_pos: 0,
+            max_pixel_clock: 0,
+            reserved1: [0; 190],
         }
     }
 }
 
 impl core::fmt::Display for VesaModeInfoBlock {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        //writeln!(f, "window_size : {}", self.window_size);
-        //writeln!(f, "pitch : {}", self.pitch);
-        write!(f, "{}x{}x{}", self.width, self.height, self.bits_per_pixel)?;
-        //writeln!(f, "bpp : {}", self.bpp);
-        //writeln!(f, "off_screen_mem_off : {}", self.off_screen_mem_off);
-        //writeln!(f, "off_screen_mem_size : {}", self.off_screen_mem_size);
+        // This is needed to make rust not complain about packed fields being unaligned
+        let (w, h, bpp, attr) = (
+            self.width,
+            self.height,
+            self.bits_per_pixel,
+            self.mode_attributes,
+        );
+        write!(f, "{}x{}x{} attr = 0b{:b}", w, h, bpp, attr)?;
         Ok(())
     }
 }
@@ -359,9 +536,3 @@ enum VbeError {
     NotVerson3,
     BadCapabilities,
 }
-
-#[test]
-fn test_vbe_info_block_size() {}
-
-#[test]
-fn test_vbe_mode_info_block_size() {}
