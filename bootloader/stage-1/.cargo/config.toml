@@ -1,0 +1,7 @@
+[build]
+target="./../../tuples/i386-bit16.json"
+
+[unstable]
+mtime-on-use = true
+build-std = [ "core", "alloc" ]
+build-std-features= [ "compiler-builtins-mem" ]

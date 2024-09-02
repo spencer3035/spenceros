@@ -1,14 +1,12 @@
-use common::println;
-use helper_struct::RaceyCell;
-
-use super::{Color, Screen};
+use super::Screen;
+use common::println_bios as println;
 use core::mem::MaybeUninit;
-use core::{arch::asm, ptr::addr_of, ptr::addr_of_mut};
+use core::{arch::asm, ptr::addr_of};
 
 pub fn init() -> Screen {
-    assert_eq!(size_of::<VbeInfoBlock>(), 512, "VbeInfoBlock bad size");
+    assert_eq!(size_of::<VesaVbeBlockDef>(), 512, "VbeInfoBlock bad size");
     assert_eq!(
-        size_of::<VesaModeInfoBlock>(),
+        size_of::<VesaVbeModeDef>(),
         256,
         "VesaModeInfoBlock bad size"
     );
@@ -66,37 +64,6 @@ unsafe fn get_vga_font() {
     }
 }
 
-use core::cell::RefCell;
-// TODO: Change to refcel
-
-pub mod helper_struct {
-    use core::{borrow::Borrow, cell::UnsafeCell};
-
-    pub struct RaceyCell<T>(UnsafeCell<T>);
-
-    impl<T> RaceyCell<T> {
-        pub const fn new(v: T) -> Self {
-            Self(UnsafeCell::new(v))
-        }
-
-        /// Gets a mutable reference
-        ///
-        /// SAFETY: Can only be called when no other references exist
-        pub unsafe fn get_mut(&self) -> &mut T {
-            unsafe { &mut *self.0.get() }
-        }
-
-        /// Gets a reference to the data
-        pub fn get(&self) -> &T {
-            // SAFETY: We don't use the mutable pointer and the undelying data in gaurenteed to be
-            // a valid pointer because that is the only way to construct it.
-            unsafe { &*(self.0.get() as *const T) }
-        }
-    }
-
-    unsafe impl<T: Send> Send for RaceyCell<T> {}
-    unsafe impl<T: Sync> Sync for RaceyCell<T> {}
-}
 /// Checks that the ax value indicates return success for VBE function calls. Panics if not success
 macro_rules! check_vbe_ax {
     ($ax:ident, $($args:tt)*) => {
@@ -111,11 +78,11 @@ macro_rules! check_vbe_ax {
 }
 
 /// Gets the best vbe mode given desired width, height, depth, and a list of supported mode ids
-fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> VesaModeInfoSimple {
+fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> VesaModeInfo {
     let mut diff = u16::MAX;
     let mut best_mode = 0;
 
-    let mut vbe_mode = VesaModeInfoSimple::null();
+    let mut vbe_mode = VesaModeInfo::null();
 
     for mode_id in modes.iter() {
         if let Err(_) = vbe_mode.load(*mode_id) {
@@ -138,18 +105,18 @@ fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> VesaModeI
     }
 
     // Read mode to structure
-    vbe_mode.load(best_mode);
+    vbe_mode.load(best_mode).unwrap();
     vbe_mode
 }
 
 /// SAFETY: Can only be called by one thread at a time, contains mutable static information
-fn set_best_vbe_mode() -> VesaModeInfoSimple {
+fn set_best_vbe_mode() -> VesaModeInfo {
     // Get the best mode relative to these target numbers
     // TODO: Get these numbers from EDID: https://wiki.osdev.org/EDID
     //let (width, height) = (1920, 1080, 24);
     let (width, height, depth) = (1280, 720, 24);
 
-    let vbe_block = VbeInfoBlock::new();
+    let vbe_block = VesaVbeBlockDef::new();
     let modes = vbe_block.get_modes();
 
     println!("modes = {modes:?}");
@@ -160,6 +127,7 @@ fn set_best_vbe_mode() -> VesaModeInfoSimple {
     println!("Best mode {mode:?}");
 
     const USE_LINEAR_FRAME_BUFFER: u16 = 0x4000;
+    #[allow(dead_code)]
     const USE_CRTC_INFO_BLOCK: u16 = 1 << 10;
     // Set the mode
     unsafe {
@@ -181,7 +149,7 @@ fn set_best_vbe_mode() -> VesaModeInfoSimple {
 
 #[allow(dead_code)]
 #[repr(C, packed)]
-pub struct VbeInfoBlock {
+pub struct VesaVbeBlockDef {
     // b"VESA" or [86, 69, 83, 65] or [0x56, 0x45, 0x53, 0x41]
     signature: [u8; 4],
     // 0x300 for VBE 3
@@ -199,7 +167,7 @@ pub struct VbeInfoBlock {
     oem_data: [u8; 256],
 }
 
-impl VbeInfoBlock {
+impl VesaVbeBlockDef {
     fn get_modes(&self) -> &[u16] {
         let mode_ptr = self.video_mode_ptr as *const u16;
         let max_modes = 0x100;
@@ -214,26 +182,10 @@ impl VbeInfoBlock {
 
         unsafe { core::slice::from_raw_parts(mode_ptr, length) }
     }
-    const fn null() -> VbeInfoBlock {
-        VbeInfoBlock {
-            signature: [0; 4],
-            version: 0,
-            oem_string_ptr: 0,
-            capabillities: [0; 4],
-            video_mode_ptr: 0,
-            total_memory: 0,
-            oem_software_rev: 0,
-            oem_vendor_name_ptr: 0,
-            oem_product_name_ptr: 0,
-            oem_product_rev_ptr: 0,
-            reserved: [0; 222],
-            oem_data: [0; 256],
-        }
-    }
 
     /// Loads VBE info from block
     fn load(&mut self) {
-        /// Modifies the content of self
+        // Modifies the content of self
         unsafe {
             let mut ax: u16 = 0x4f00;
             asm!(
@@ -265,10 +217,10 @@ impl VbeInfoBlock {
             // Check version
             Err(VbeError::NotVerson3)
         } else if self.capabillities != [1, 0, 0, 0] {
-            common::println!("self={:?}", self.capabillities);
-            common::println!("arr ={:?}", [1, 0, 0, 0]);
+            common::println_bios!("self={:?}", self.capabillities);
+            common::println_bios!("arr ={:?}", [1, 0, 0, 0]);
             for (ii, val) in self.capabillities.iter().enumerate() {
-                common::println!("{ii}: {val}");
+                common::println_bios!("{ii}: {val}");
             }
             // Check capabilities are as expected
             Err(VbeError::BadCapabilities)
@@ -276,13 +228,14 @@ impl VbeInfoBlock {
             Ok(())
         }
     }
+    #[allow(dead_code)]
     fn display(&self) -> VbeDisplay {
         self.into()
     }
 }
 
-impl<'a> From<&'a VbeInfoBlock> for VbeDisplay<'a> {
-    fn from(value: &'a VbeInfoBlock) -> Self {
+impl<'a> From<&'a VesaVbeBlockDef> for VbeDisplay<'a> {
+    fn from(value: &'a VesaVbeBlockDef) -> Self {
         VbeDisplay {
             signature: &value.signature,
             version: value.version,
@@ -308,7 +261,7 @@ pub struct VbeDisplay<'a> {
     total_memory: u16,
 }
 
-impl core::fmt::Display for VbeInfoBlock {
+impl core::fmt::Display for VesaVbeBlockDef {
     fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         todo!()
     }
@@ -316,7 +269,7 @@ impl core::fmt::Display for VbeInfoBlock {
 
 #[derive(Debug)]
 #[repr(C)]
-pub struct VesaModeInfoSimple {
+pub struct VesaModeInfo {
     mode_id: u16,
     /// Number of bytes to get next horizontal row
     bytes_per_scan_line: u16,
@@ -331,9 +284,9 @@ pub struct VesaModeInfoSimple {
     // TODO: Put color mask
 }
 
-impl VesaModeInfoSimple {
-    const fn null() -> VesaModeInfoSimple {
-        VesaModeInfoSimple {
+impl VesaModeInfo {
+    const fn null() -> VesaModeInfo {
+        VesaModeInfo {
             mode_id: 0,
             bytes_per_scan_line: 0,
             width: 0,
@@ -346,17 +299,18 @@ impl VesaModeInfoSimple {
         // Read mode to structure
         //
         // SAFETY: Assembly modifies vbe_mode_def, needs to remain mutable to maintain correctness
-        let mut vbe_mode_def = VesaModeInfoBlock::null();
+        let mut vbe_mode_def = VesaVbeModeDef::null();
         let mut ax = 0x4f01;
         unsafe {
             asm!(
                 "int 0x10",
                 inout("ax") ax,
                 in("cx") mode_id,
-                in("di") &vbe_mode_def,
+                in("di") &mut vbe_mode_def,
             );
         }
         check_vbe_ax!(ax, "VBE mode fail");
+        vbe_mode_def.check()?;
 
         // Check it is a mode we want
         // Packed pixel or direct color
@@ -369,7 +323,7 @@ impl VesaModeInfoSimple {
             return Err(VbeError::ModeNotGood);
         }
 
-        *self = VesaModeInfoSimple {
+        *self = VesaModeInfo {
             mode_id,
             bits_per_pixel: vbe_mode_def.bits_per_pixel,
             bytes_per_scan_line: vbe_mode_def.bytes_per_scan_line,
@@ -385,7 +339,7 @@ impl VesaModeInfoSimple {
 #[derive(Debug)]
 #[allow(dead_code)]
 #[repr(C, packed)]
-pub struct VesaModeInfoBlock {
+pub struct VesaVbeModeDef {
     // ** Manditory for all VBE revisions
     mode_attributes: u16,
     window_a: u8,
@@ -446,26 +400,29 @@ pub struct VesaModeInfoBlock {
 
 /// Mode is suported by hardware
 const SUPPORTED_BY_HARDWARE: u16 = 1 << 0;
+#[allow(dead_code)]
 /// TTY Output supoprted by BIOS
 const TTY_BIOS_OUT: u16 = 1 << 2;
+#[allow(dead_code)]
 /// Color mode is enabled
 const COLOR_MODE: u16 = 1 << 3;
 /// Graphics mode, not text mode
 const GRAPICS_MODE: u16 = 1 << 4;
 /// Doesn't have VGA compatability
 const NO_VGA_COMPAT: u16 = 1 << 5;
+#[allow(dead_code)]
 /// Has VGA compatible windowed memory
 const WINDOWED_MEMORY: u16 = 1 << 6;
 /// Has linear frame buffer
 const LINEAR_FRAME_BUFFER: u16 = 1 << 7;
 
-impl VesaModeInfoBlock {
+impl VesaVbeModeDef {
     fn check(&self) -> Result<(), VbeError> {
         // TODO: Check for validity
         Ok(())
     }
-    const fn null() -> VesaModeInfoBlock {
-        VesaModeInfoBlock {
+    const fn null() -> VesaVbeModeDef {
+        VesaVbeModeDef {
             mode_attributes: 0,
             window_a: 0,
             window_b: 0,
@@ -515,7 +472,7 @@ impl VesaModeInfoBlock {
     }
 }
 
-impl core::fmt::Display for VesaModeInfoBlock {
+impl core::fmt::Display for VesaVbeModeDef {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         // This is needed to make rust not complain about packed fields being unaligned
         let (w, h, bpp, attr) = (

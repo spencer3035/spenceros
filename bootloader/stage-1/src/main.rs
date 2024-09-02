@@ -6,8 +6,9 @@
 use core::arch::asm;
 
 use common::gdt::*;
+use common::println_bios as println;
 use common::real_mode::hlt;
-use common::*;
+use common::MEMORY_MAP_START;
 
 static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 

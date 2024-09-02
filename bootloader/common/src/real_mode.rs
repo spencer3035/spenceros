@@ -13,7 +13,7 @@ pub fn print_char(c: u8) {
 }
 
 #[macro_export]
-macro_rules! print {
+macro_rules! print_bios {
     ($($arg:tt)*) => {{
         #[allow(unused_imports)]
         use core::fmt::Write as _;
@@ -22,7 +22,7 @@ macro_rules! print {
 }
 
 #[macro_export]
-macro_rules! println {
+macro_rules! println_bios {
     ($($arg:tt)*) => {{
         #[allow(unused_imports)]
         use core::fmt::Write as _;

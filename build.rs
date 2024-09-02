@@ -59,29 +59,36 @@ fn build_elf(local_path: &Path, out_dir: &Path, bits: &NBits) -> PathBuf {
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut cmd = Command::new(cargo);
     let target = match bits {
-        NBits::Bits16 => "tuples/i386-bit16.json",
-        NBits::Bits32 => "tuples/i386-bit32.json",
-        NBits::Bits64 => "tuples/x86_64-unknown-kernel.json",
+        NBits::Bits16 => "i386-bit16",
+        NBits::Bits32 => "i386-bit32",
+        NBits::Bits64 => "x86_64-unknown-kernel",
     };
-    cmd.arg("install")
+    let target_file: PathBuf = format!("./tuples/{target}.json").into();
+
+    println!("{}", out_dir.display());
+    cmd.arg("build")
+        .arg("--package")
+        .arg(local_path.file_name().unwrap())
+        .arg("--release")
         .arg("--color")
         .arg("always")
-        .arg("--path")
-        .arg(local_path)
         .arg("--locked")
+        .arg("--target-dir")
+        .arg(out_dir)
         .arg("--target")
-        .arg(target)
+        .arg(target_file)
         .arg("-Zbuild-std=core")
         .arg("-Zbuild-std-features=compiler-builtins-mem")
-        .arg("--root")
-        .arg(out_dir)
         .env_remove("RUSTFLAGS")
         .env_remove("CARGO_ENCODED_RUSTFLAGS")
         .env_remove("RUSTC_WORKSPACE_WRAPPER");
 
     let status = cmd.status().expect("Failed to run cargo command");
     assert!(status.success(), "Failed running cargo command");
-    out_dir.join("bin").join(local_path.file_name().unwrap())
+    out_dir
+        .join(target)
+        .join("release")
+        .join(local_path.file_name().unwrap())
 }
 
 fn build_stage(out_dir: &Path, stage_number: usize) -> PathBuf {

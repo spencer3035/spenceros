@@ -1,0 +1,7 @@
+[build]
+target="./../../tuples/x86_64-unknown-kernel.json"
+
+[unstable]
+mtime-on-use = true
+build-std = [ "core", "alloc" ]
+build-std-features= [ "compiler-builtins-mem" ]

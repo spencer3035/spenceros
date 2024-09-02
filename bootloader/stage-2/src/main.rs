@@ -7,6 +7,8 @@ use common::protected_mode::io::clear_screen;
 use common::*;
 use core::arch::asm;
 
+use common::{print, println};
+
 static GDT_LONG: Gdt = Gdt::long_mode();
 
 use core::panic::PanicInfo;
