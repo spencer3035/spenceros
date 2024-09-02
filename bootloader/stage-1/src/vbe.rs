@@ -1,10 +1,9 @@
 mod vbe_impl;
 use core::{
     fmt::Write,
-    sync::atomic::{AtomicBool, AtomicU16, AtomicUsize, Ordering},
+    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
-use common::println_bios;
 use vbe_impl::set_bitmap_font_from_bios;
 
 static mut FRAME_BUFFER: Option<FramebufferInfo> = None;
@@ -19,6 +18,8 @@ pub trait FrameBuffer {
     fn set_pixel(&self, x: u16, y: u16, c: &Color) -> bool;
     /// Gets font bitmap
     fn font(&self) -> Option<&'static [u8; 0x1000]>;
+    /// Shifts up rows by given number of pixels
+    fn shift_up(&self, rows: u16);
     /// Sets the characer at the given position (in units of characters
     fn set_char(&self, x: u16, y: u16, c: u8) -> bool {
         if (x + 1) * 8 > self.width() || (y + 1) * 16 > self.height() {
@@ -101,6 +102,9 @@ impl FrameBuffer for FramebufferInfo {
     fn font(&self) -> Option<&'static [u8; 0x1000]> {
         unsafe { FONT.as_ref() }
     }
+    fn shift_up(&self, rows: u16) {
+        self.shift_up_impl(rows);
+    }
 }
 
 #[derive(Debug)]
@@ -121,6 +125,30 @@ pub struct FramebufferInfo {
 }
 
 impl FramebufferInfo {
+    fn shift_up_impl(&self, rows: u16) {
+        let bytes_per_row = self.bits_per_pixel as usize * self.width() as usize / 8;
+        for row in 0..(self.height().saturating_sub(rows)) {
+            let dst_offset = row as usize * self.bytes_per_scan_line as usize;
+            let src_offset = (row + rows) as usize * self.bytes_per_scan_line as usize;
+
+            unsafe {
+                let dst: *mut u8 = self.framebuffer.add(dst_offset);
+                let src: *mut u8 = self.framebuffer.add(src_offset);
+                core::ptr::copy_nonoverlapping(src, dst, bytes_per_row);
+            }
+        }
+
+        // Set last `rows` rows to black
+        for ii in 0..rows.min(self.height) {
+            let dst_offset = self.bytes_per_scan_line as usize
+                * self.height.saturating_sub(ii).saturating_sub(1) as usize;
+            unsafe {
+                let dst = self.framebuffer.add(dst_offset);
+                let slice = core::slice::from_raw_parts_mut(dst, bytes_per_row);
+                slice.fill(0);
+            }
+        }
+    }
     #[inline]
     fn get_pixel_address(&self, x: u16, y: u16) -> *mut u8 {
         let y_offset = y as usize * self.bytes_per_scan_line as usize;
@@ -172,6 +200,9 @@ impl FrameBuffer for Screen {
     fn font(&self) -> Option<&'static [u8; 0x1000]> {
         unsafe { FONT.as_ref() }
     }
+    fn shift_up(&self, rows: u16) {
+        unsafe { FRAME_BUFFER.as_ref().unwrap().shift_up(rows) }
+    }
 }
 
 impl Write for Screen {
@@ -184,7 +215,12 @@ impl Write for Screen {
     }
 }
 
+static SCREEN_IS_INIT: AtomicBool = AtomicBool::new(false);
+
 impl Screen {
+    pub fn is_init() -> bool {
+        SCREEN_IS_INIT.load(Ordering::Relaxed)
+    }
     pub fn reset(&self) {
         CHAR_INDEX.store(0, Ordering::Relaxed);
         // Set everything to dark gray
@@ -203,9 +239,8 @@ impl Screen {
     fn write_char_impl(&self, c: char) {
         let mut char_idx = CHAR_INDEX.load(Ordering::Acquire);
         if char_idx >= self.width_char() as usize * self.height_char() as usize {
-            char_idx -= self.width_char() as usize;
-            CHAR_INDEX.store(char_idx, Ordering::Release);
-            panic!("Scrolling not implemented");
+            char_idx = (self.height_char() as usize - 1) * self.width_char() as usize;
+            self.shift_up(16);
         }
 
         if c == '\n' {
@@ -228,7 +263,7 @@ impl Screen {
 /// Enters the best fit VBE mode
 ///
 /// SAFETY: Writes to static variables, can't be used accross threads
-pub fn init_graphical() -> Screen {
+pub fn init_graphical() {
     unsafe {
         FONT = Some([0; 0x1000]);
         set_bitmap_font_from_bios(FONT.as_mut().unwrap());
@@ -240,35 +275,12 @@ pub fn init_graphical() -> Screen {
     //    }
     //}
 
-    //loop {}
-
     let mode = vbe_impl::init();
     unsafe {
         FRAME_BUFFER = Some(mode);
+        SCREEN_IS_INIT.store(true, Ordering::Relaxed)
     }
 
-    // Set everything to dark gray
-    for x in 0..Screen.width() {
-        for y in 0..Screen.height() {
-            Screen.set_pixel(x, y, &Color::new(20, 20, 20));
-        }
-    }
-
-    // 1024x720
-    for x in 0..Screen.width() {
-        let y = 400;
-        //let (width, height, depth) = (1280, 720, 24);
-        Screen.set_pixel(x, y, &Color::new(0, 0xff, 0));
-    }
-
-    // 160x45
-    //write!(Screen, "{}x{}", Screen.width_char(), Screen.height_char());
-    //loop {}
-
-    for ii in 0..(720 + 1) {
-        let v = ii % 10;
-        write!(Screen, "{v}12345678_").unwrap();
-    }
-    //write!(Screen, "Here is a long string\n with some new linese \n");
-    loop {}
+    // pixel size: 1024x720
+    // char  size: 160x45
 }

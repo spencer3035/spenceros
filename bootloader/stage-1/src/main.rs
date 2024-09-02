@@ -14,16 +14,26 @@ use vbe::Screen;
 
 static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
+macro_rules! println {
+    ($($args:tt)*) => {
+        if $crate::vbe::Screen::is_init() {
+            use core::fmt::Write;
+            if let Err(e) = writeln!($crate::vbe::Screen, $($args)*) {
+                // Fall back on bios printing. We want to avoid potential double panics
+                println_bios!("write error : {e}");
+                println_bios!($($args)*);
+            }
+        } else {
+            println_bios!($($args)*);
+        }
+    };
+}
+
 use core::panic::PanicInfo;
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    if vbe::Screen.font().is_some() {
-        use core::fmt::Write;
-        Screen.reset();
-        writeln!(Screen, "PANIC: {info}");
-    } else {
-        println_bios!("PANIC: {info}");
-    }
+    // Has potential for double panic
+    println!("PANIC: {info}");
     hlt();
 }
 
@@ -46,12 +56,10 @@ pub extern "C" fn _start(_disk_number: u16) {
     let count = unsafe { detect_memory() };
     init_graphical();
 
-    panic!("Not ready for next stage");
     unsafe {
         load_gdt();
         next_stage(count);
     }
-    panic!("Returned back to stage 1");
 }
 
 /// Detects memory using int 0x15 with eax = 0xE820, returns number of entries read
