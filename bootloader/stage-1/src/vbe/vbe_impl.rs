@@ -1,7 +1,7 @@
 use core::arch::asm;
 use core::mem::MaybeUninit;
 
-use common::framebuffer::FramebufferInfo;
+use common::io::framebuffer::FramebufferInfo;
 
 pub fn init() -> FramebufferInfo {
     assert_eq!(size_of::<VesaVbeBlockDef>(), 512, "VbeInfoBlock bad size");
@@ -34,15 +34,15 @@ fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Framebuff
     // SAFETY: This gets init with the load() function at the beginning of each loop. If it
     // doesn't enter the loop, best_mode will be none and will panic before using any info from
     // this variable
-    let mut vbe_mode: FramebufferInfo = unsafe { MaybeUninit::uninit().assume_init() };
+    let mut framebuffer: FramebufferInfo = FramebufferInfo::null();
 
     for mode_id in modes.iter() {
-        if let Err(_) = load(&mut vbe_mode, *mode_id) {
+        if let Err(_) = load(&mut framebuffer, *mode_id) {
             continue;
         }
         // Check the residual
-        let mode_diff = vbe_mode.width.abs_diff(width) + vbe_mode.height.abs_diff(height);
-        if vbe_mode.bits_per_pixel == depth && mode_diff <= diff {
+        let mode_diff = framebuffer.width.abs_diff(width) + framebuffer.height.abs_diff(height);
+        if framebuffer.bits_per_pixel == depth && mode_diff <= diff {
             diff = mode_diff;
             best_mode = Some(*mode_id);
         }
@@ -54,11 +54,15 @@ fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Framebuff
     let best_mode = best_mode.unwrap();
 
     // Read best mode to structure
-    if let Err(e) = load(&mut vbe_mode, best_mode) {
-        panic!("Couldn't load VBE mode: {e:?}");
+    if let Err(e) = load(&mut framebuffer, best_mode) {
+        panic!("couldn't load mode {best_mode}: {e:?}");
     }
 
-    vbe_mode
+    if !framebuffer.is_valid() {
+        panic!("Got invalid framebuffer!");
+    }
+
+    framebuffer
 }
 
 /// SAFETY: Can only be called by one thread at a time, contains mutable static information
@@ -114,6 +118,13 @@ pub struct VesaVbeBlockDef {
     oem_data: [u8; 256],
 }
 
+impl core::fmt::Display for VesaVbeBlockDef {
+    fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        print!("sig : {:?}", self.signature);
+        Ok(())
+    }
+}
+
 impl VesaVbeBlockDef {
     fn get_modes(&self) -> &[u16] {
         let mode_ptr = self.video_mode_ptr as *const u16;
@@ -134,18 +145,20 @@ impl VesaVbeBlockDef {
     fn new() -> Self {
         // SAFETY: result is init by the assembly call. It is additionally checked for validity
         // after and panics if invalid
-        let mut res: Self = unsafe { MaybeUninit::uninit().assume_init() };
+        let mut res: MaybeUninit<Self> = MaybeUninit::uninit();
         // Modifies the content of self
         unsafe {
             let mut ax: u16 = 0x4f00;
             asm!(
                 "int 0x10",
                 inout("ax") ax,
-                in("di") &mut res
+                in("di") res.assume_init_mut()
             );
             check_vbe_ax!(ax, "VBE load fail code 0x{ax:x}");
         }
+        let res = unsafe { res.assume_init() };
 
+        println!("{res}");
         res.check().unwrap();
         res
     }
@@ -172,25 +185,20 @@ impl VesaVbeBlockDef {
     }
 }
 
-impl core::fmt::Display for VesaVbeBlockDef {
-    fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        todo!()
-    }
-}
-
 /// Reads a VBE mode to frame buffer
 fn load(framebuffer: &mut FramebufferInfo, mode_id: u16) -> Result<(), VbeError> {
     // SAFETY: vbe is populated with bios call below and checked for validity immediately after
-    let mut vbe_mode_def: VesaVbeModeDef = unsafe { MaybeUninit::uninit().assume_init() };
+    let mut vbe_mode_def: MaybeUninit<VesaVbeModeDef> = MaybeUninit::uninit();
     let mut ax = 0x4f01;
     unsafe {
         asm!(
             "int 0x10",
             inout("ax") ax,
             in("cx") mode_id,
-            in("di") &mut vbe_mode_def,
+            in("di") vbe_mode_def.assume_init_mut(),
         );
     }
+    let vbe_mode_def = unsafe { vbe_mode_def.assume_init() };
     check_vbe_ax!(ax, "VBE mode fail");
     vbe_mode_def.check()?;
 

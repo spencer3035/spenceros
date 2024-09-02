@@ -6,8 +6,9 @@ global_asm!(include_str!("boot.s"));
 use core::arch::asm;
 use core::arch::global_asm;
 
-use common::real_mode::{fail, hlt};
-use common::*;
+pub mod fail;
+
+use fail::fail;
 
 extern "C" {
     /// The address of this number is set in the link.ld file to be the first byte of the next
@@ -15,48 +16,44 @@ extern "C" {
     static _second_stage_start: u8;
 }
 
-use core::panic::PanicInfo;
-#[panic_handler]
-fn panic(_info: &PanicInfo) -> ! {
-    fail(b"panic");
-}
-
 #[no_mangle]
 pub extern "C" fn main(drive_number: u16) {
-    unsafe {
-        check_int13();
-    }
+    check_int13();
     load_sectors(drive_number);
 
     // Transmute the pointer to the beginning of the next stage to a function and call it.
     let next_stage: extern "C" fn(disk_number: u16) =
         unsafe { core::mem::transmute(&_second_stage_start as *const u8 as *const ()) };
     next_stage(drive_number);
-    hlt();
+    fail(b"stage 1")
 }
 
 /// Check that inturrupt 13 is avaliable
 #[inline(always)]
-unsafe fn check_int13() {
+fn check_int13() {
     let ax: u16;
-    asm!(
-      "mov ah, 0x41",
-      "mov bx, 0x55aa",
-      // dl contains drive number
-      "int 0x13",
-      // Put carry flag into ax
-      "mov {0:x}, 0",
-      "adc {0:x}, 0",
-       out(reg) ax
-    );
+    unsafe {
+        asm!(
+          "mov ah, 0x41",
+          "mov bx, 0x55aa",
+          // dl contains drive number
+          "int 0x13",
+          // Put carry flag into ax
+          "mov ax, 0",
+          "jnc 2f",
+          "mov ax, 12",
+          "2:",
+           out("ax") ax
+        );
 
-    if ax != 0 {
-        fail(b"int13");
+        if ax != 0 {
+            fail(b"int13");
+        }
     }
 }
 
 fn load_sectors(drive_number: u16) {
-    let mut num_sectors: u8 = SECTORS_TO_READ as u8;
+    let mut num_sectors: u8 = common::config::SECTORS_TO_READ as u8;
     let requested_sectors = num_sectors;
     let to_address: u16 = 0x7e00;
     let carry: u16;

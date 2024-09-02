@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use common::{
+use common::config::{
     SECTORS_TO_READ, STAGE_0_SECTIONS, STAGE_1_SECTIONS, STAGE_2_SECTIONS, STAGE_3_SECTIONS,
 };
 

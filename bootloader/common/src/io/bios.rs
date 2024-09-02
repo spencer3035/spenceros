@@ -1,5 +1,25 @@
 use core::arch::asm;
 
+/// Prints using [`BiosWriter`]
+#[macro_export]
+macro_rules! print_bios {
+    ($($arg:tt)*) => {{
+        #[allow(unused_imports)]
+        use core::fmt::Write as _;
+        write!($crate::io::bios::BiosWriter, $($arg)*).unwrap();
+    }};
+}
+
+/// Prints using [`BiosWriter`]
+#[macro_export]
+macro_rules! println_bios {
+    ($($arg:tt)*) => {{
+        #[allow(unused_imports)]
+        use core::fmt::Write as _;
+        writeln!($crate::io::bios::BiosWriter, $($arg)*).unwrap();
+    }};
+}
+
 /// Prints a single characetr to the screen
 #[inline]
 pub fn print_char(c: u8) {
@@ -12,28 +32,9 @@ pub fn print_char(c: u8) {
     }
 }
 
-/// Prints using the bios inturrupt 0x10 with ah = 0x0e;
-#[macro_export]
-macro_rules! print_bios {
-    ($($arg:tt)*) => {{
-        #[allow(unused_imports)]
-        use core::fmt::Write as _;
-        write!($crate::real_mode::BiosWriter, $($arg)*).unwrap();
-    }};
-}
-
-#[macro_export]
-macro_rules! println_bios {
-    ($($arg:tt)*) => {{
-        #[allow(unused_imports)]
-        use core::fmt::Write as _;
-        writeln!($crate::real_mode::BiosWriter, $($arg)*).unwrap();
-    }};
-}
-
 /// Writes characters to console using the BIOS inturrupt 0x10 with ah = 0x0e;
 ///
-/// Cannot print any non-ascii characters, they will be displayed as
+/// Cannot print any non-ascii characters, they will be displayed as '?'
 pub struct BiosWriter;
 
 impl core::fmt::Write for BiosWriter {
@@ -161,56 +162,5 @@ pub fn println_chars(chars: &[u8]) {
 pub fn print_chars(chars: &[u8]) {
     for val in chars.iter() {
         print_char(*val);
-    }
-}
-
-/// Prints 'Fail: [char]' and halts
-pub fn fail(code: &[u8]) -> ! {
-    print_chars(b"Fail: ");
-    println_chars(code);
-    hlt()
-}
-
-/// Prints 'Fail: [char]' where [char] should be the top element on the stack when this is called.
-///
-/// Works from assembly when called, but not jumped to.
-///
-/// Should not be called with jump commands (jmp fail_asm) from assembly. Will not work unless called
-///
-/// # Example
-///
-/// ```
-/// asm!(
-///     // Push error code
-///     "push 'e'",
-///     // Calls function and prints "Fail: e"
-///     "call fail_asm",
-/// );
-/// ```
-///
-/// # Bad example
-/// ```
-/// asm!(
-///     // Push error code
-///     "push 'e'",
-///     // Will not set the stack up properly and will fail to display 'e'. Is probably undefined
-///     // behavior depending on what exists on the stack externally from this code
-///     "jmp fail_asm",
-/// );
-/// ```
-///
-#[no_mangle]
-pub extern "C" fn fail_asm(code: &u8) -> ! {
-    print_chars(b"Fail: ");
-    print_char(*code);
-    hlt()
-}
-
-/// Halts the CPU
-pub fn hlt() -> ! {
-    loop {
-        unsafe {
-            asm!("hlt");
-        }
     }
 }

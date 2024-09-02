@@ -9,9 +9,9 @@ pub type Font = [u8; 0x1000];
 #[macro_export]
 macro_rules! println_screen {
     ($($args:tt)*) => {
-        if $crate::framebuffer::Screen::is_init() {
+        if $crate::io::framebuffer::Screen::is_init() {
             use core::fmt::Write as _;
-            if let Err(e) = writeln!($crate::vbe::Screen, $($args)*) {
+            if let Err(e) = writeln!($crate::io::framebuffer::Screen, $($args)*) {
                 // Fall back on bios printing. We want to avoid potential double panics
                 panic!("write error : {e}");
             }
@@ -24,9 +24,9 @@ macro_rules! println_screen {
 #[macro_export]
 macro_rules! print_screen {
     ($($args:tt)*) => {
-        if $crate::framebuffer::Screen::is_init() {
+        if $crate::io::framebuffer::Screen::is_init() {
             use core::fmt::Write as _;
-            if let Err(e) = write!($crate::vbe::Screen, $($args)*) {
+            if let Err(e) = writeln!($crate::io::framebuffer::Screen, $($args)*) {
                 // Fall back on bios printing. We want to avoid potential double panics
                 panic!("write error : {e}");
             }
@@ -188,6 +188,26 @@ pub struct FramebufferInfo {
 }
 
 impl FramebufferInfo {
+    /// Gets null, invalid frame buffer. Can be used for construction
+    pub const fn null() -> FramebufferInfo {
+        FramebufferInfo {
+            mode_id: 0,
+            bytes_per_scan_line: 0,
+            width: 0,
+            height: 0,
+            bits_per_pixel: 0,
+            framebuffer: 0 as *mut u8,
+        }
+    }
+    /// Checks if the framebuffer is valid. Should be checked before returning/passing a
+    /// framebuffer around
+    #[must_use]
+    pub fn is_valid(&self) -> bool {
+        self.bytes_per_scan_line != 0
+            && self.width != 0
+            && self.height != 0
+            && self.bits_per_pixel != 0
+    }
     fn shift_up_impl(&self, rows: u16) {
         let bytes_per_row = self.bits_per_pixel as usize * self.width() as usize / 8;
         for row in 0..(self.height().saturating_sub(rows)) {

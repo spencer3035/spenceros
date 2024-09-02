@@ -3,7 +3,17 @@
 
 use core::arch::asm;
 
-use common::{print, println};
+macro_rules! println {
+    ($($args:tt)*) => {
+        common::println_screen!($($args)*);
+    };
+}
+
+macro_rules! print {
+    ($($args:tt)*) => {
+        common::print_screen!($($args)*);
+    };
+}
 
 use core::panic::PanicInfo;
 #[panic_handler]

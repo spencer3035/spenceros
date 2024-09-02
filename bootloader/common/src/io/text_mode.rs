@@ -1,7 +1,7 @@
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 #[macro_export]
-macro_rules! print {
+macro_rules! print_textmode {
     () => {};
     ($($arg:tt)*) => {
         #[allow(unused_imports)]
@@ -11,7 +11,7 @@ macro_rules! print {
 }
 
 #[macro_export]
-macro_rules! println {
+macro_rules! println_textmode {
     () => {
         #[allow(unused_imports)]
         use ::core::fmt::Write as _;
@@ -25,7 +25,7 @@ macro_rules! println {
     };
 }
 
-impl core::fmt::Write for Writer {
+impl core::fmt::Write for TextModeWriter {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         for c in s.chars() {
             if c.is_ascii() {
@@ -114,8 +114,9 @@ impl TextColor {
     }
 }
 
+/// Writes to the console using the textmode framebuffer located at 0xB8000
 #[derive(Default)]
-pub struct Writer {
+pub struct TextModeWriter {
     color: TextColor,
 }
 
@@ -127,7 +128,7 @@ fn write_char_row_col_color(c: u8, row: usize, col: usize, color: &TextColor) {
     }
 }
 
-impl Writer {
+impl TextModeWriter {
     /// Sets the color of the text
     #[allow(dead_code)]
     pub fn set_color(&mut self, color: TextColor) {

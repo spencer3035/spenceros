@@ -5,19 +5,16 @@
 
 use core::arch::asm;
 
+use common::config::MEMORY_MAP_START;
 use common::gdt::*;
-use common::println_bios;
-use common::real_mode::hlt;
-use common::MEMORY_MAP_START;
 
 static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
-#[macro_export]
 macro_rules! println {
     ($($args:tt)*) => {
-        if common::framebuffer::Screen::is_init() {
+        if common::io::framebuffer::Screen::is_init() {
             use core::fmt::Write as _;
-            if let Err(e) = writeln!(common::framebuffer::Screen, $($args)*) {
+            if let Err(e) = writeln!(common::io::framebuffer::Screen, $($args)*) {
                 // Fall back on bios printing. We want to avoid potential double panics
                 common::println_bios!("write error : {e}");
                 common::println_bios!($($args)*);
@@ -28,12 +25,29 @@ macro_rules! println {
     };
 }
 
+macro_rules! print {
+    ($($args:tt)*) => {
+        if common::io::framebuffer::Screen::is_init() {
+            use core::fmt::Write as _;
+            if let Err(e) = write!(common::io::framebuffer::Screen, $($args)*) {
+                // Fall back on bios printing. We want to avoid potential double panics
+                common::print_bios!("write error : {e}");
+                common::print_bios!($($args)*);
+            }
+        } else {
+            common::print_bios!($($args)*);
+        }
+    };
+}
+
 use core::panic::PanicInfo;
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
     // Has potential for double panic
     println!("PANIC: {info}");
-    hlt();
+    loop {
+        unsafe { asm!("hlt") }
+    }
 }
 
 use vbe::init_graphical;
@@ -42,7 +56,7 @@ pub mod vbe;
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
-    println_bios!("Starting stage 1");
+    println!("Starting stage 1");
 
     unsafe {
         enable_a20();
@@ -57,7 +71,6 @@ pub extern "C" fn _start(_disk_number: u16) {
 
     panic!("Not ready for next stage");
     unsafe {
-        loop {}
         load_gdt();
         next_stage(count);
     }
@@ -84,7 +97,9 @@ unsafe fn detect_memory() -> u16 {
                 "int 0x15",
                 // TODO: Put this check outside and remove "fail_asm" call. This doesn't even work
                 // really
-                "jc fail_asm",
+                "jnc 2f",
+                "mov eax, 1",
+                "2:",
                 // https://wiki.osdev.org/Detecting_Memory_(x86)#BIOS_Function:_INT_0x15,_EAX_=_0xE820
                 // If success:
                 // Carry is clear

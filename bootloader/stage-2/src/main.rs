@@ -1,15 +1,23 @@
 #![no_std]
 #![no_main]
 
+use common::config::*;
 use common::gdt::*;
-use common::protected_mode::hlt;
-use common::protected_mode::io::clear_screen;
-use common::*;
 use core::arch::asm;
 
-use common::{print, println};
-
 static GDT_LONG: Gdt = Gdt::long_mode();
+
+macro_rules! println {
+    ($($args:tt)*) => {
+        common::println_screen!($($args)*);
+    };
+}
+
+macro_rules! print {
+    ($($args:tt)*) => {
+        common::print_screen!($($args)*);
+    };
+}
 
 use core::panic::PanicInfo;
 #[panic_handler]
@@ -33,7 +41,6 @@ struct MemoryMapEntry {
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_count: u16) -> ! {
-    clear_screen();
     println!("Started protected mode");
 
     //let mut mmap_reader: *const MemoryMapEntry = MEMORY_MAP_START as *const MemoryMapEntry;
@@ -46,8 +53,7 @@ pub extern "C" fn _start(_count: u16) -> ! {
 
     // Note that CPUID functionality is checked in stage-1
     if !has_long_mode() {
-        println!("No long mode!");
-        hlt();
+        panic!("No long mode!");
     }
 
     unsafe {
@@ -129,7 +135,7 @@ pub extern "C" fn _start(_count: u16) -> ! {
             out(reg) _,
         );
     }
-    hlt();
+    panic!("Returned from stage 3");
 }
 
 #[allow(dead_code)]
