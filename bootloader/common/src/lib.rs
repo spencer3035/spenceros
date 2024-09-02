@@ -12,6 +12,7 @@ pub mod real_mode;
 #[cfg(feature = "protected_mode")]
 pub mod protected_mode;
 
+pub mod framebuffer;
 pub mod gdt;
 
 /// Info passed to the kernel

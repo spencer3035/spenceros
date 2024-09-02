@@ -9,22 +9,21 @@ use common::gdt::*;
 use common::println_bios;
 use common::real_mode::hlt;
 use common::MEMORY_MAP_START;
-use vbe::FrameBuffer;
-use vbe::Screen;
 
 static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
+#[macro_export]
 macro_rules! println {
     ($($args:tt)*) => {
-        if $crate::vbe::Screen::is_init() {
-            use core::fmt::Write;
-            if let Err(e) = writeln!($crate::vbe::Screen, $($args)*) {
+        if common::framebuffer::Screen::is_init() {
+            use core::fmt::Write as _;
+            if let Err(e) = writeln!(common::framebuffer::Screen, $($args)*) {
                 // Fall back on bios printing. We want to avoid potential double panics
-                println_bios!("write error : {e}");
-                println_bios!($($args)*);
+                common::println_bios!("write error : {e}");
+                common::println_bios!($($args)*);
             }
         } else {
-            println_bios!($($args)*);
+            common::println_bios!($($args)*);
         }
     };
 }
@@ -56,7 +55,9 @@ pub extern "C" fn _start(_disk_number: u16) {
     let count = unsafe { detect_memory() };
     init_graphical();
 
+    panic!("Not ready for next stage");
     unsafe {
+        loop {}
         load_gdt();
         next_stage(count);
     }

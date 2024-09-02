@@ -1,8 +1,7 @@
 use core::arch::asm;
 use core::mem::MaybeUninit;
 
-use super::FramebufferInfo;
-pub type Font = [u8; 0x1000];
+use common::framebuffer::FramebufferInfo;
 
 pub fn init() -> FramebufferInfo {
     assert_eq!(size_of::<VesaVbeBlockDef>(), 512, "VbeInfoBlock bad size");
@@ -12,42 +11,6 @@ pub fn init() -> FramebufferInfo {
         "VesaModeInfoBlock bad size"
     );
     set_best_vbe_mode()
-}
-
-/// Loads BIOS VGA font into a given address
-pub fn set_bitmap_font_from_bios(font: &mut Font) {
-    // ES:BP is address of font we want to save
-    let mut bp: u16;
-    let mut es: u16;
-    unsafe {
-        asm!(
-            // Save segment register, they get modified by bios call
-            "push			es",
-            // Ask BIOS to return VGA bitmap font location
-            //
-            // Returns pointer to font at ES:BP, as well as info in CX and DL we don't care about
-            "mov			ax, 1130h",
-            "mov			bh, 6",
-            "int			0x10",
-            // Save results
-            "mov			{0:x}, bp",
-            "mov			{1:x}, es",
-            // Reset segment register
-            "pop			es",
-            out(reg) bp,
-            out(reg) es,
-        );
-    }
-
-    // Convert segmented addressing to linear address
-    let address = (16 * (es as usize) + bp as usize) as *const u8;
-
-    // Save font
-    for ii in 0..0x1000 {
-        unsafe {
-            font[ii] = address.add(ii).read();
-        }
-    }
 }
 
 /// Checks that the ax value indicates return success for VBE function calls. Panics if not success
@@ -74,7 +37,7 @@ fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Framebuff
     let mut vbe_mode: FramebufferInfo = unsafe { MaybeUninit::uninit().assume_init() };
 
     for mode_id in modes.iter() {
-        if let Err(_) = vbe_mode.load(*mode_id) {
+        if let Err(_) = load(&mut vbe_mode, *mode_id) {
             continue;
         }
         // Check the residual
@@ -90,12 +53,11 @@ fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Framebuff
     }
     let best_mode = best_mode.unwrap();
 
-    if let Err(e) = vbe_mode.load(best_mode) {
+    // Read best mode to structure
+    if let Err(e) = load(&mut vbe_mode, best_mode) {
         panic!("Couldn't load VBE mode: {e:?}");
     }
 
-    // Read mode to structure
-    vbe_mode.load(best_mode).unwrap();
     vbe_mode
 }
 
@@ -216,45 +178,42 @@ impl core::fmt::Display for VesaVbeBlockDef {
     }
 }
 
-impl FramebufferInfo {
-    /// Reads a VBE mode to frame buffer
-    fn load(&mut self, mode_id: u16) -> Result<(), VbeError> {
-        // SAFETY: vbe is populated with bios call below and checked for validity immediately after
-        let mut vbe_mode_def: VesaVbeModeDef = unsafe { MaybeUninit::uninit().assume_init() };
-        let mut ax = 0x4f01;
-        unsafe {
-            asm!(
-                "int 0x10",
-                inout("ax") ax,
-                in("cx") mode_id,
-                in("di") &mut vbe_mode_def,
-            );
-        }
-        check_vbe_ax!(ax, "VBE mode fail");
-        vbe_mode_def.check()?;
-
-        // Check it is a mode we want
-        // Packed pixel or direct color
-        let memory_model_works = vbe_mode_def.memory_model == 4 || vbe_mode_def.memory_model == 6;
-        let required_flags =
-            SUPPORTED_BY_HARDWARE | LINEAR_FRAME_BUFFER | NO_VGA_COMPAT | GRAPICS_MODE;
-        let has_flags = vbe_mode_def.mode_attributes & required_flags == required_flags;
-        let good_mode = memory_model_works && has_flags;
-        if !good_mode {
-            return Err(VbeError::ModeNotGood);
-        }
-
-        *self = FramebufferInfo {
-            mode_id,
-            bits_per_pixel: vbe_mode_def.bits_per_pixel,
-            bytes_per_scan_line: vbe_mode_def.bytes_per_scan_line,
-            width: vbe_mode_def.width,
-            height: vbe_mode_def.height,
-            framebuffer: vbe_mode_def.framebuffer as *mut u8,
-        };
-
-        Ok(())
+/// Reads a VBE mode to frame buffer
+fn load(framebuffer: &mut FramebufferInfo, mode_id: u16) -> Result<(), VbeError> {
+    // SAFETY: vbe is populated with bios call below and checked for validity immediately after
+    let mut vbe_mode_def: VesaVbeModeDef = unsafe { MaybeUninit::uninit().assume_init() };
+    let mut ax = 0x4f01;
+    unsafe {
+        asm!(
+            "int 0x10",
+            inout("ax") ax,
+            in("cx") mode_id,
+            in("di") &mut vbe_mode_def,
+        );
     }
+    check_vbe_ax!(ax, "VBE mode fail");
+    vbe_mode_def.check()?;
+
+    // Check it is a mode we want
+    // Packed pixel or direct color
+    let memory_model_works = vbe_mode_def.memory_model == 4 || vbe_mode_def.memory_model == 6;
+    let required_flags = SUPPORTED_BY_HARDWARE | LINEAR_FRAME_BUFFER | NO_VGA_COMPAT | GRAPICS_MODE;
+    let has_flags = vbe_mode_def.mode_attributes & required_flags == required_flags;
+    let good_mode = memory_model_works && has_flags;
+    if !good_mode {
+        return Err(VbeError::ModeNotGood);
+    }
+
+    *framebuffer = FramebufferInfo {
+        mode_id,
+        bits_per_pixel: vbe_mode_def.bits_per_pixel,
+        bytes_per_scan_line: vbe_mode_def.bytes_per_scan_line,
+        width: vbe_mode_def.width,
+        height: vbe_mode_def.height,
+        framebuffer: vbe_mode_def.framebuffer as *mut u8,
+    };
+
+    Ok(())
 }
 
 /// Defininition/memory layout for the VesaVbeMode 3.0

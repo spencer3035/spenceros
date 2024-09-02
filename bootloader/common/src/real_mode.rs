@@ -12,6 +12,7 @@ pub fn print_char(c: u8) {
     }
 }
 
+/// Prints using the bios inturrupt 0x10 with ah = 0x0e;
 #[macro_export]
 macro_rules! print_bios {
     ($($arg:tt)*) => {{
@@ -30,6 +31,9 @@ macro_rules! println_bios {
     }};
 }
 
+/// Writes characters to console using the BIOS inturrupt 0x10 with ah = 0x0e;
+///
+/// Cannot print any non-ascii characters, they will be displayed as
 pub struct BiosWriter;
 
 impl core::fmt::Write for BiosWriter {
@@ -67,7 +71,7 @@ pub fn print_hex32(mut num: u32) {
             asm!("push {0:x}", in(reg) hexit);
         }
         num_hexits += 1;
-        num = num >> 4;
+        num >>= 4;
         if num == 0 {
             break;
         }
@@ -99,7 +103,7 @@ pub fn print_hex(mut num: u16) {
             asm!("push {0:x}", in(reg) hexit);
         }
         num_hexits += 1;
-        num = num >> 4;
+        num >>= 4;
         if num == 0 {
             break;
         }
@@ -148,8 +152,7 @@ pub fn print_dec(mut num: u16) {
 }
 
 /// Prints a slice of characters to screen with \c\r at the end
-#[inline]
-pub fn printline(chars: &[u8]) {
+pub fn println_chars(chars: &[u8]) {
     print_chars(chars);
     print_chars(b"\r\n");
 }
@@ -161,18 +164,41 @@ pub fn print_chars(chars: &[u8]) {
     }
 }
 
-/// Prints '![char]' where [char] should be the top element on the stack when this is called
-///
-/// Should not be called with jump commands from assembly. Will not work unless called
+/// Prints 'Fail: [char]' and halts
 pub fn fail(code: &[u8]) -> ! {
     print_chars(b"Fail: ");
-    printline(code);
+    println_chars(code);
     hlt()
 }
 
-/// Prints '![char]' where [char] should be the top element on the stack when this is called
+/// Prints 'Fail: [char]' where [char] should be the top element on the stack when this is called.
 ///
-/// Should not be called with jump commands from assembly. Will not work unless called
+/// Works from assembly when called, but not jumped to.
+///
+/// Should not be called with jump commands (jmp fail_asm) from assembly. Will not work unless called
+///
+/// # Example
+///
+/// ```
+/// asm!(
+///     // Push error code
+///     "push 'e'",
+///     // Calls function and prints "Fail: e"
+///     "call fail_asm",
+/// );
+/// ```
+///
+/// # Bad example
+/// ```
+/// asm!(
+///     // Push error code
+///     "push 'e'",
+///     // Will not set the stack up properly and will fail to display 'e'. Is probably undefined
+///     // behavior depending on what exists on the stack externally from this code
+///     "jmp fail_asm",
+/// );
+/// ```
+///
 #[no_mangle]
 pub extern "C" fn fail_asm(code: &u8) -> ! {
     print_chars(b"Fail: ");
@@ -180,7 +206,7 @@ pub extern "C" fn fail_asm(code: &u8) -> ! {
     hlt()
 }
 
-/// Displays "Halt." and Halts CPU
+/// Halts the CPU
 pub fn hlt() -> ! {
     loop {
         unsafe {
