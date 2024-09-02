@@ -6,16 +6,24 @@
 use core::arch::asm;
 
 use common::gdt::*;
-use common::println_bios as println;
+use common::println_bios;
 use common::real_mode::hlt;
 use common::MEMORY_MAP_START;
+use vbe::FrameBuffer;
+use vbe::Screen;
 
 static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
 use core::panic::PanicInfo;
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    println!("PANIC: {info}");
+    if vbe::Screen.font().is_some() {
+        use core::fmt::Write;
+        Screen.reset();
+        writeln!(Screen, "PANIC: {info}");
+    } else {
+        println_bios!("PANIC: {info}");
+    }
     hlt();
 }
 
@@ -25,7 +33,7 @@ pub mod vbe;
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
-    println!("Starting stage 1");
+    println_bios!("Starting stage 1");
 
     unsafe {
         enable_a20();
