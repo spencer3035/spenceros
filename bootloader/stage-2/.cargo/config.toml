@@ -3,5 +3,5 @@ target="./../../tuples/i386-bit32.json"
 
 [unstable]
 mtime-on-use = true
-build-std = [ "core", "alloc" ]
+build-std = [ "core" ]
 build-std-features= [ "compiler-builtins-mem" ]
