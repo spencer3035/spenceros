@@ -8,6 +8,8 @@ use core::arch::global_asm;
 
 pub mod fail;
 
+use common::config::STACK_END;
+use common::config::STACK_START;
 use fail::fail;
 
 extern "C" {
@@ -18,6 +20,21 @@ extern "C" {
 
 #[no_mangle]
 pub extern "C" fn main(drive_number: u16) {
+    let bp: u16;
+    let sp: u16;
+    unsafe {
+        asm!(
+        "mov {0:x}, bp",
+        "mov {1:x}, sp",
+        out(reg) bp,
+        out(reg) sp
+        );
+    }
+
+    if bp != STACK_END as u16 || sp < STACK_START as u16 || sp > STACK_END as u16 {
+        fail(b"Stack out of range");
+    }
+
     check_int13();
     load_sectors(drive_number);
 

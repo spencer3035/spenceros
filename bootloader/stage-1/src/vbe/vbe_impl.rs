@@ -1,28 +1,45 @@
 use core::arch::asm;
 use core::mem::MaybeUninit;
 
+use common::io::framebuffer::Color;
+use common::io::framebuffer::FrameBuffer;
 use common::io::framebuffer::FramebufferInfo;
+use common::io::framebuffer::Screen;
 
-pub fn init() -> FramebufferInfo {
+static mut TMP_BUFFER: [u8; 0x200] = [0; 0x200];
+
+pub fn init() {
     assert_eq!(size_of::<VesaVbeBlockDef>(), 512, "VbeInfoBlock bad size");
     assert_eq!(
         size_of::<VesaVbeModeDef>(),
         256,
         "VesaModeInfoBlock bad size"
     );
-    set_best_vbe_mode()
+    let mode = set_best_vbe_mode();
+    Screen::init(mode);
+    println!("init loop");
+    //println!("mode = {mode:?}");
+    loop {}
+}
+
+// TODO: Figure out why this causes things to print properly
+fn fill_screen() {
+    for ii in 0..Screen.width() {
+        for jj in 0..Screen.height() {
+            Screen.set_pixel(ii, jj, &Color::BLACK);
+        }
+    }
 }
 
 /// Checks that the ax value indicates return success for VBE function calls. Panics if not success
 macro_rules! check_vbe_ax {
     ($ax:ident, $($args:tt)*) => {
-            let ah = $ax >> 8;
-            let al = $ax & 0x00ff;
-            // 0x4f is magic return code
-            if al != 0x4f || ah != 0 {
-                panic!($($args)*)
-            }
-
+        let ah = $ax >> 8;
+        let al = $ax & 0x00ff;
+        // 0x4f is magic return code
+        if al != 0x4f || ah != 0 {
+            panic!($($args)*)
+        }
     };
 }
 
@@ -32,8 +49,6 @@ fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Framebuff
     let mut best_mode = None;
 
     // SAFETY: This gets init with the load() function at the beginning of each loop. If it
-    // doesn't enter the loop, best_mode will be none and will panic before using any info from
-    // this variable
     let mut framebuffer: FramebufferInfo = FramebufferInfo::null();
 
     for mode_id in modes.iter() {
@@ -68,9 +83,7 @@ fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Framebuff
 /// SAFETY: Can only be called by one thread at a time, contains mutable static information
 fn set_best_vbe_mode() -> FramebufferInfo {
     // Get the best mode relative to these target numbers
-    // TODO: Get these numbers from EDID: https://wiki.osdev.org/EDID
-    //let (width, height) = (1920, 1080, 24);
-    let (width, height, depth) = (1280, 720, 24);
+    let (width, height, depth) = get_preferred_width_height_depth();
 
     let vbe_block = VesaVbeBlockDef::new();
     let modes = vbe_block.get_modes();
@@ -97,6 +110,156 @@ fn set_best_vbe_mode() -> FramebufferInfo {
     best_mode
 }
 
+#[derive(Debug)]
+struct PreferredResolution {
+    depth: u8,
+    width: u16,
+    height: u16,
+}
+
+static mut EDID_DATA: EdidData = EdidData {
+    header: [0; 8],
+    manufacturer_id: 0,
+    product_id: 0,
+    serial_id: 0,
+    week: 0,
+    year: 0,
+    version: 0,
+    revision: 0,
+    video_input_def: 0,
+    horizontal_aspect_ratio: 0,
+    vertical_aspect_ratio: 0,
+    gamma: 0,
+    feature_support: 0,
+    chromo_coords: [0; 34 - 25 + 1],
+    established_timing: [0; 37 - 35 + 1],
+    standard_timing: [0; 53 - 38 + 1],
+    display_timing: [0; 125 - 54 + 1],
+    extension_flag: [0; 127 - 126 + 1],
+};
+
+/// Section 3.1 of doc
+#[repr(C, align(0x80))]
+struct EdidData {
+    // Header information
+    header: [u8; 8],
+    manufacturer_id: u16,
+    product_id: u16,
+    serial_id: u32,
+    week: u8,
+    year: u8,
+    version: u8,
+    revision: u8,
+    // Basic display paramaters
+    video_input_def: u8,
+    horizontal_aspect_ratio: u8,
+    vertical_aspect_ratio: u8,
+    gamma: u8,
+    feature_support: u8,
+    // chromo corrds
+    chromo_coords: [u8; 34 - 25 + 1],
+    established_timing: [u8; 37 - 35 + 1],
+    standard_timing: [u8; 53 - 38 + 1],
+    display_timing: [u8; 125 - 54 + 1],
+    extension_flag: [u8; 127 - 126 + 1],
+}
+
+impl EdidData {
+    #[must_use]
+    fn is_valid(&self) -> bool {
+        // TODO: Convert to error instead of bool
+        // TODO: Add more checks
+        if self.header != [0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0] {
+            false
+        } else {
+            true
+        }
+    }
+    fn display(&self) -> EdidDataDisplay {
+        EdidDataDisplay {
+            header: &self.header,
+            manufacturer_id: &self.manufacturer_id,
+            product_id: &self.product_id,
+            serial_id: &self.serial_id,
+            week: &self.week,
+            year: &self.year,
+            version: &self.version,
+            revision: &self.revision,
+            video_input_def: &self.video_input_def,
+            horizontal_aspect_ratio: &self.horizontal_aspect_ratio,
+            vertical_aspect_ratio: &self.vertical_aspect_ratio,
+            gamma: &self.gamma,
+            feature_support: &self.feature_support,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct EdidDataDisplay<'a> {
+    header: &'a [u8; 8],
+    manufacturer_id: &'a u16,
+    product_id: &'a u16,
+    serial_id: &'a u32,
+    week: &'a u8,
+    year: &'a u8,
+    version: &'a u8,
+    revision: &'a u8,
+    video_input_def: &'a u8,
+    horizontal_aspect_ratio: &'a u8,
+    vertical_aspect_ratio: &'a u8,
+    gamma: &'a u8,
+    feature_support: &'a u8,
+}
+
+fn get_preferred_width_height_depth() -> (u16, u16, u8) {
+    assert_eq!(size_of::<EdidData>(), 0x80);
+
+    let mut ax = 0x4f15;
+    let mut edid_data: EdidData;
+    unsafe {
+        // SAFETY: Edid data is init by bios call
+        edid_data = MaybeUninit::uninit().assume_init();
+        asm!(
+            "mov bl, 0x01",
+            "xor cx, cx",
+            "xor dx, dx",
+            "mov es, cx",
+            "int 0x10",
+            inout("ax") ax,
+            in("di") &mut edid_data,
+        );
+    };
+
+    if ax != 0x4f {
+        panic!("Bad ax : 0x{ax:x}");
+    }
+
+    if !edid_data.is_valid() {
+        panic!("Bad edid data");
+    }
+
+    let (def, info) = (edid_data.video_input_def, &edid_data.display_timing);
+    let depth = if def & 0b10000000 != 0 {
+        let bits_per_color = match (def & 0b01110000) >> 4 {
+            0b001 => 6,
+            0b010 => 8,
+            0b011 => 10,
+            0b100 => 12,
+            0b101 => 14,
+            0b110 => 16,
+            _ => panic!("Unknown bit depth"),
+        };
+        // TODO: Check 3 colors per pixel (RGB).
+        bits_per_color * 3
+    } else {
+        panic!("Analogue displays not supported");
+    };
+    let width = info[2] as u16 | ((info[4] & 0xF0) as u16) << 4;
+    let height = info[5] as u16 | ((info[7] & 0xF0) as u16) << 4;
+
+    (width, height, depth)
+}
+
 /// Defininition/memory layout for the Vesa VBE info block 3.0
 #[allow(dead_code)]
 #[repr(C, packed)]
@@ -120,8 +283,8 @@ pub struct VesaVbeBlockDef {
 
 impl core::fmt::Display for VesaVbeBlockDef {
     fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        print!("sig : {:?}", self.signature);
-        Ok(())
+        todo!();
+        //Ok(())
     }
 }
 
@@ -143,22 +306,23 @@ impl VesaVbeBlockDef {
 
     /// Loads VBE into new structure
     fn new() -> Self {
-        // SAFETY: result is init by the assembly call. It is additionally checked for validity
-        // after and panics if invalid
-        let mut res: MaybeUninit<Self> = MaybeUninit::uninit();
-        // Modifies the content of self
+        let mut res: Self;
+        let mut ax: u16 = 0x4f00;
+
+        // SAFETY: result is init by the assembly call that takes a pointer to the result. It is
+        // important that res is marked as mut and that a mutable reference is passed to signal to
+        // the compiler the correct thing is happening. It is additionally checked for validity
+        // after and panics if invalid.
         unsafe {
-            let mut ax: u16 = 0x4f00;
+            res = MaybeUninit::uninit().assume_init();
             asm!(
                 "int 0x10",
                 inout("ax") ax,
-                in("di") res.assume_init_mut()
+                in("di") &mut res
             );
-            check_vbe_ax!(ax, "VBE load fail code 0x{ax:x}");
-        }
-        let res = unsafe { res.assume_init() };
+        };
 
-        println!("{res}");
+        check_vbe_ax!(ax, "VBE load fail code 0x{ax:x}");
         res.check().unwrap();
         res
     }
@@ -166,6 +330,7 @@ impl VesaVbeBlockDef {
     /// Checks if block is valid
     fn check(&self) -> Result<(), VbeError> {
         if &self.signature != b"VESA" {
+            println!("{:?} != {:?}", self.signature, b"VESA");
             // Check signature
             Err(VbeError::SignatureNotValid)
         } else if self.version != 0x300 {
@@ -187,18 +352,19 @@ impl VesaVbeBlockDef {
 
 /// Reads a VBE mode to frame buffer
 fn load(framebuffer: &mut FramebufferInfo, mode_id: u16) -> Result<(), VbeError> {
-    // SAFETY: vbe is populated with bios call below and checked for validity immediately after
-    let mut vbe_mode_def: MaybeUninit<VesaVbeModeDef> = MaybeUninit::uninit();
+    let mut vbe_mode_def: VesaVbeModeDef;
     let mut ax = 0x4f01;
+
     unsafe {
+        // SAFETY: vbe is populated with bios call below and checked for validity immediately after
+        vbe_mode_def = MaybeUninit::uninit().assume_init();
         asm!(
             "int 0x10",
             inout("ax") ax,
             in("cx") mode_id,
-            in("di") vbe_mode_def.assume_init_mut(),
+            in("di") &mut vbe_mode_def
         );
     }
-    let vbe_mode_def = unsafe { vbe_mode_def.assume_init() };
     check_vbe_ax!(ax, "VBE mode fail");
     vbe_mode_def.check()?;
 

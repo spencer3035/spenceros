@@ -43,7 +43,6 @@ macro_rules! print {
 use core::panic::PanicInfo;
 #[panic_handler]
 fn panic(info: &PanicInfo) -> ! {
-    // Has potential for double panic
     println!("PANIC: {info}");
     loop {
         unsafe { asm!("hlt") }
@@ -69,7 +68,9 @@ pub extern "C" fn _start(_disk_number: u16) {
     let count = unsafe { detect_memory() };
     init_graphical();
 
+    println!("test");
     panic!("Not ready for next stage");
+    loop {}
     unsafe {
         load_gdt();
         next_stage(count);

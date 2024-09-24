@@ -16,8 +16,8 @@ _start:
   mov fs, ax
   mov gs, ax
 
-  # initialize stack
-  mov bp, 0x1000
+  # initialize stack, should match STACK_END
+  mov bp, 0x7000
   mov ss, ax
   mov sp, bp
 

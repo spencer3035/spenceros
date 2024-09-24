@@ -79,6 +79,8 @@ pub trait FrameBuffer {
     fn height(&self) -> u16;
     /// Sets the given pixel the given color
     fn set_pixel(&self, x: u16, y: u16, c: &Color) -> bool;
+    /// Clears the screen (sets to black)
+    fn clear(&self);
     /// Gets font bitmap
     fn font(&self) -> Option<&'static [u8; 0x1000]>;
     /// Shifts up rows by given number of pixels
@@ -147,6 +149,12 @@ impl Color {
         b: 0xff,
     };
 
+    pub const BLACK: Color = Color {
+        r: 0x0,
+        g: 0x0,
+        b: 0x0,
+    };
+
     pub fn new(r: u8, g: u8, b: u8) -> Self {
         Color { r, g, b }
     }
@@ -161,6 +169,9 @@ impl FrameBuffer for FramebufferInfo {
     }
     fn set_pixel(&self, x: u16, y: u16, c: &Color) -> bool {
         self.set_pixel_impl(x, y, c)
+    }
+    fn clear(&self) {
+        self.clear_impl()
     }
     fn font(&self) -> Option<&'static [u8; 0x1000]> {
         unsafe { FONT.as_ref() }
@@ -203,6 +214,8 @@ impl FramebufferInfo {
     /// framebuffer around
     #[must_use]
     pub fn is_valid(&self) -> bool {
+        // TODO: Convert to error instead of bool
+        // TODO: Add more checks
         self.bytes_per_scan_line != 0
             && self.width != 0
             && self.height != 0
@@ -264,6 +277,21 @@ impl FramebufferInfo {
 
         true
     }
+
+    /// Sets the given pixel a color, returns false if pixel is out of range
+    fn clear_impl(&self) {
+        let mut addr = self.get_pixel_address(0, 0);
+
+        let bytes_per_line = self.width() as usize * self.bits_per_pixel as usize / 8;
+
+        for _jj in 0..self.height() {
+            unsafe {
+                let slice = core::slice::from_raw_parts_mut(addr, bytes_per_line);
+                slice.fill(0);
+                addr = addr.add(self.bytes_per_scan_line as usize);
+            }
+        }
+    }
 }
 
 static SCREEN_IS_INIT: AtomicBool = AtomicBool::new(false);
@@ -289,6 +317,9 @@ impl FrameBuffer for Screen {
     fn shift_up(&self, rows: u16) {
         unsafe { FRAME_BUFFER.as_ref().unwrap().shift_up(rows) }
     }
+    fn clear(&self) {
+        unsafe { FRAME_BUFFER.as_ref().unwrap().clear() }
+    }
 }
 
 impl Write for Screen {
@@ -296,7 +327,6 @@ impl Write for Screen {
         for c in s.chars() {
             self.write_char_impl(c);
         }
-
         Ok(())
     }
 }
@@ -308,7 +338,10 @@ impl Screen {
             FONT = Some([0; 0x1000]);
             set_bitmap_font_from_bios(FONT.as_mut().unwrap());
         }
-        SCREEN_IS_INIT.store(true, Ordering::Relaxed)
+        SCREEN_IS_INIT.store(true, Ordering::Relaxed);
+        // This seems to "wake up" the screen so later prints work. It may be worth investigating
+        // why some prints do not display correctly without this
+        Screen.clear();
     }
     pub fn is_init() -> bool {
         SCREEN_IS_INIT.load(Ordering::Relaxed)
