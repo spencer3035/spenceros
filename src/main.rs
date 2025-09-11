@@ -79,7 +79,12 @@ fn main() {
     println!("{}\n{}", stdout, stderr);
 }
 
-#[test]
-fn test_images_correct_size() {
-    assert_sizes();
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_images_correct_size() {
+        assert_sizes();
+    }
 }
