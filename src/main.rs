@@ -83,26 +83,3 @@ fn main() {
 fn test_images_correct_size() {
     assert_sizes();
 }
-
-#[test]
-fn test_stack_in_range() {
-    assert!((STACK_START as u32) < (u16::MAX as u32));
-    assert!((STACK_END as u32) < (u16::MAX as u32));
-}
-
-#[test]
-fn test_sectors_readable() {
-    assert!(SECTORS_TO_READ < u8::MAX as usize);
-    assert!(
-        STAGE_2_SECTIONS as u32 * 0x200 + (STAGE_0_START as u32) < 0xffff,
-        "Address outside of 16 bit range"
-    )
-}
-
-#[test]
-fn test_pages_aligned() {
-    assert!(PML4T_START as u64 % 0x1000 == 0, "Page not 4096 aligned");
-    assert!(PDPT_START as u64 % 0x1000 == 0, "Page not 4096 aligned");
-    assert!(PDT_START as u64 % 0x1000 == 0, "Page not 4096 aligned");
-    assert!(PT_START as u64 % 0x1000 == 0, "Page not 4096 aligned");
-}

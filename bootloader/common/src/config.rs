@@ -38,3 +38,31 @@ pub const BIOS_INFO: *const BiosInfo = (0x5006 + 6 * 50) as *const BiosInfo;
 /// Start of the memory map, each entry is 24 bytes, number of entries is not known at runtime, but
 /// in the emulator it is 7 entries which would be 7*24=168 bytes
 pub const MEMORY_MAP_START: *mut u8 = ((0x5006 + 6 * 50) + size_of::<BiosInfo>()) as *mut u8;
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_stack_in_range() {
+        assert!((STACK_START as usize) < (u16::MAX as usize));
+        assert!((STACK_END as usize) < (u16::MAX as usize));
+    }
+
+    #[test]
+    fn test_sectors_readable() {
+        assert!(SECTORS_TO_READ <= u8::MAX as usize);
+        assert!(
+            STAGE_2_SECTIONS as u32 * 0x200 + (STAGE_0_START as u32) < 0xffff,
+            "Address outside of 16 bit range"
+        )
+    }
+
+    #[test]
+    fn test_pages_aligned() {
+        assert!(PML4T_START as u64 % 0x1000 == 0, "Page not 4096 aligned");
+        assert!(PDPT_START as u64 % 0x1000 == 0, "Page not 4096 aligned");
+        assert!(PDT_START as u64 % 0x1000 == 0, "Page not 4096 aligned");
+        assert!(PT_START as u64 % 0x1000 == 0, "Page not 4096 aligned");
+    }
+}
