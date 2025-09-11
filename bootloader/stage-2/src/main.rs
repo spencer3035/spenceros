@@ -19,9 +19,9 @@ macro_rules! print {
     };
 }
 
-use core::panic::PanicInfo;
 #[panic_handler]
-fn panic(info: &PanicInfo) -> ! {
+#[cfg(target_os = "none")]
+fn panic(info: &core::panic::PanicInfo) -> ! {
     println!("{info}");
     loop {
         unsafe { asm!("hlt") }
