@@ -1,0 +1,3 @@
+break *0x7e00
+break *0x8175
+break *0x811D

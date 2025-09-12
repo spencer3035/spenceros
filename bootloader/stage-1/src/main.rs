@@ -2,41 +2,26 @@
 #![no_main]
 #![feature(const_trait_impl)]
 #![deny(unsafe_op_in_unsafe_fn)]
+// TODO: Remove
+#![allow(unused)]
 
 use core::arch::asm;
 
-use common::config::MEMORY_MAP_START;
+use common::config::{MEMORY_MAP_START, STACK_END, STACK_START};
 use common::gdt::*;
 
 static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
 macro_rules! println {
     ($($args:tt)*) => {
-        if common::io::framebuffer::Screen::is_init() {
-            use core::fmt::Write as _;
-            if let Err(e) = writeln!(common::io::framebuffer::Screen, $($args)*) {
-                // Fall back on bios printing. We want to avoid potential double panics
-                common::println_bios!("write error : {e}");
-                common::println_bios!($($args)*);
-            }
-        } else {
-            common::println_bios!($($args)*);
-        }
+            common::println_bios!($($args)*)
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! print {
     ($($args:tt)*) => {
-        if common::io::framebuffer::Screen::is_init() {
-            use core::fmt::Write as _;
-            if let Err(e) = write!(common::io::framebuffer::Screen, $($args)*) {
-                // Fall back on bios printing. We want to avoid potential double panics
-                common::print_bios!("write error : {e}");
-                common::print_bios!($($args)*);
-            }
-        } else {
-            common::print_bios!($($args)*);
-        }
+        common::print_bios!($($args)*);
     };
 }
 
@@ -49,8 +34,127 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     }
 }
 
+use common::io::bios::{print_char, print_chars, print_hex, print_hex32};
 use vbe::init_graphical;
 pub mod vbe;
+
+#[inline(always)]
+fn print_stack_used() {
+    let mut sp: u32;
+    unsafe {
+        asm!("mov {:e}, esp",  out(reg) sp);
+    }
+    // let total = STACK_END as u32 - STACK_START as u32;
+    let used = STACK_END as u32 - sp;
+    println!("USED: 0x{used:X}");
+}
+
+fn print_fn_location(f: fn()) {
+    let addr: usize = f as *const () as usize;
+    println!("fn: 0x{addr:X}");
+}
+fn poll_keypress() -> Option<char> {
+    // INT 16 ; AH = 1
+    // OUT:
+    // ZF set if no key pressed
+    // ZF clear if key avaliable
+    let mut ax: u16 = 0x0100;
+    let mut key_present: u16 = 0;
+    unsafe {
+        asm!(
+            "int 0x16",
+            "jz 2f", // No key event
+            "mov dx, 1",
+            "2:",
+            inout("ax") ax,
+            inout("dx") key_present,
+        );
+    }
+    let ch = (ax & 0xFF) as u8 as char;
+    if ch != '\0' && ch.is_ascii_control() {
+        // println!("CONTROL: {}", ch.escape_default());
+    }
+    if key_present == 0 {
+        None
+    } else {
+        Some(next_keypress())
+    }
+}
+
+fn next_keypress() -> char {
+    // INT 16 ; AH = 0
+    // OUT AL = ascii character
+    let mut ax: u16 = 0x0000;
+    unsafe {
+        asm!(
+            "int 0x16",
+            inout("ax") ax,
+        );
+    }
+    let ch = (ax & 0xFF) as u8 as char;
+    if ch == '\r' {
+        '\n'
+    } else {
+        ch
+    }
+}
+
+struct StringOverflow;
+
+impl core::fmt::Display for StringOverflow {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "String Overflow, max size = {}", STATIC_STRING_LENGTH)
+    }
+}
+
+const STATIC_STRING_LENGTH: usize = 255;
+struct StaticString {
+    chars: [char; STATIC_STRING_LENGTH],
+    len: usize,
+}
+
+impl StaticString {
+    const fn new() -> Self {
+        StaticString {
+            chars: ['\0'; STATIC_STRING_LENGTH],
+            len: 0,
+        }
+    }
+
+    /// Returns error if overflow and the number of characters left if it succeeds
+    fn push(&mut self, ch: char) -> Result<usize, StringOverflow> {
+        if self.len >= STATIC_STRING_LENGTH {
+            Err(StringOverflow)
+        } else {
+            self.chars[self.len] = ch;
+            self.len += 1;
+            Ok(STATIC_STRING_LENGTH - self.len)
+        }
+    }
+
+    fn clear(&mut self) {
+        self.len = 0;
+    }
+}
+
+impl core::fmt::Display for StaticString {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        if self.len > 0 {
+            for ch in self.chars[0..self.len].iter() {
+                write!(f, "{}", ch)?;
+            }
+            Ok(())
+        } else {
+            Ok(())
+        }
+    }
+}
+
+fn prompt_continue() -> bool {
+    print!("Continue (y/n)? ");
+    let ch = next_keypress();
+    ch == 'y'
+}
 
 #[link_section = ".start"]
 #[no_mangle]
@@ -65,16 +169,22 @@ pub extern "C" fn _start(_disk_number: u16) {
         panic!("CPUID not present");
     }
 
-    let count = unsafe { detect_memory() };
-    init_graphical();
+    let mut s = StaticString::new();
 
-    println!("test");
-    panic!("Not ready for next stage");
+    while !prompt_continue() {}
+
+    println!("DONE");
+
     loop {}
-    unsafe {
-        load_gdt();
-        next_stage(count);
-    }
+
+    // let count = unsafe { detect_memory() };
+    // init_graphical();
+    // panic!("Not ready for next stage");
+    // loop {}
+    // unsafe {
+    //     load_gdt();
+    //     next_stage(count);
+    // }
 }
 
 /// Detects memory using int 0x15 with eax = 0xE820, returns number of entries read
@@ -200,10 +310,10 @@ unsafe fn load_gdt() {
     }
 }
 
+/// Check if A20 is enabled
 #[inline(always)]
 unsafe fn enable_a20() {
     // enable A20-Line via IO-Port 92, might not work on all motherboards
-    // Check if A20 is enabled
     let al: u8;
     unsafe {
         asm!(
@@ -214,13 +324,18 @@ unsafe fn enable_a20() {
     }
 
     if al != 2 {
-        //println(b"A20 already enabled");
+        println!("A20 already enabled");
         return;
     }
 
     // Enable a20
     unsafe {
-        asm!("or al, 2", "and al, 0xFE", "out 0x92, al",);
+        asm!(
+        "or {al}, 2",
+        "and al, 0xFE",
+        "out 0x92, al",
+        al = in(reg_byte) al
+        );
     }
 }
 
