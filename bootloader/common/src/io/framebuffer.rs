@@ -7,7 +7,7 @@ use core::{
 pub type Font = [u8; 0x1000];
 
 #[macro_export]
-macro_rules! println_screen {
+macro_rules! println_vbe {
     ($($args:tt)*) => {
         if $crate::io::framebuffer::Screen::is_init() {
             use core::fmt::Write as _;
@@ -22,7 +22,7 @@ macro_rules! println_screen {
 }
 
 #[macro_export]
-macro_rules! print_screen {
+macro_rules! print_vbe {
     ($($args:tt)*) => {
         if $crate::io::framebuffer::Screen::is_init() {
             use core::fmt::Write as _;

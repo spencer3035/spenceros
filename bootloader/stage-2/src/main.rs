@@ -9,13 +9,13 @@ static GDT_LONG: Gdt = Gdt::long_mode();
 
 macro_rules! println {
     ($($args:tt)*) => {
-        common::println_screen!($($args)*);
+        common::println_vbe!($($args)*);
     };
 }
 
 macro_rules! print {
     ($($args:tt)*) => {
-        common::print_screen!($($args)*);
+        common::print_vbe!($($args)*);
     };
 }
 

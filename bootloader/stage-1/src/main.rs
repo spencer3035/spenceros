@@ -8,27 +8,17 @@
 use core::arch::asm;
 
 use common::config::{MEMORY_MAP_START, STACK_END, STACK_START};
-use common::gdt::*;
+use common::print_bios;
+use common::println_bios;
+use common::{gdt::*, println_vbe};
 
 static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
-macro_rules! println {
-    ($($args:tt)*) => {
-            common::println_bios!($($args)*)
-    };
-}
-
-#[allow(unused_macros)]
-macro_rules! print {
-    ($($args:tt)*) => {
-        common::print_bios!($($args)*);
-    };
-}
-
+// TODO: Make sure correct println is used
 #[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    println!("PANIC: {info}");
+    println_bios!("PANIC: {info}");
     loop {
         unsafe { asm!("hlt") }
     }
@@ -46,12 +36,12 @@ fn print_stack_used() {
     }
     // let total = STACK_END as u32 - STACK_START as u32;
     let used = STACK_END as u32 - sp;
-    println!("USED: 0x{used:X}");
+    println_bios!("USED: 0x{used:X}");
 }
 
 fn print_fn_location(f: fn()) {
     let addr: usize = f as *const () as usize;
-    println!("fn: 0x{addr:X}");
+    println_bios!("fn: 0x{addr:X}");
 }
 fn poll_keypress() -> Option<char> {
     // INT 16 ; AH = 1
@@ -150,16 +140,22 @@ impl core::fmt::Display for StaticString {
     }
 }
 
-fn prompt_continue() -> bool {
-    print!("Continue (y/n)? ");
-    let ch = next_keypress();
-    ch == 'y'
+fn prompt_continue() {
+    // print_bios!("Continue (y/n)? ");
+    // loop {
+    //     print_bios!("Continue (y/n)? ");
+    //     let ch = next_keypress();
+    //     println_bios!("{ch}");
+    //     if ch == 'y' {
+    //         break;
+    //     }
+    // }
 }
 
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
-    println!("Starting stage 1");
+    println_bios!("Starting stage 1");
 
     unsafe {
         enable_a20();
@@ -171,14 +167,11 @@ pub extern "C" fn _start(_disk_number: u16) {
 
     let mut s = StaticString::new();
 
-    while !prompt_continue() {}
-
-    println!("DONE");
-
+    println_bios!("Init graphical");
+    init_graphical();
+    println_vbe!("Finished graphical");
     loop {}
-
     // let count = unsafe { detect_memory() };
-    // init_graphical();
     // panic!("Not ready for next stage");
     // loop {}
     // unsafe {
@@ -324,7 +317,7 @@ unsafe fn enable_a20() {
     }
 
     if al != 2 {
-        println!("A20 already enabled");
+        println_bios!("A20 already enabled");
         return;
     }
 

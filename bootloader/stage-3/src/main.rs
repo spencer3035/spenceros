@@ -3,25 +3,11 @@
 
 use core::arch::asm;
 
-#[allow(unused_macros)]
-macro_rules! println {
-    ($($args:tt)*) => {
-        common::println_screen!($($args)*);
-    };
-}
-
-#[allow(unused_macros)]
-macro_rules! print {
-    ($($args:tt)*) => {
-        common::print_screen!($($args)*);
-    };
-}
-
 #[cfg(target_os = "none")]
 #[panic_handler]
 #[cfg(target_os = "none")]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    println!("PANIC: {info}");
+    // println!("PANIC: {info}");
     loop {
         unsafe { asm!("hlt") }
     }
