@@ -220,6 +220,7 @@ impl FramebufferInfo {
             && self.width != 0
             && self.height != 0
             && self.bits_per_pixel != 0
+            && self.framebuffer as u32 != 0
     }
     fn shift_up_impl(&self, rows: u16) {
         let bytes_per_row = self.bits_per_pixel as usize * self.width() as usize / 8;
