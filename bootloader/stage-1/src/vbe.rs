@@ -4,7 +4,7 @@ use core::mem::MaybeUninit;
 use common::io::framebuffer::Color;
 use common::io::framebuffer::FrameBuffer;
 use common::io::framebuffer::FramebufferInfo;
-use common::io::framebuffer::Screen;
+use common::io::framebuffer::VbeDisplay;
 use common::println_bios;
 
 use crate::utils::get_stack_left;
@@ -27,14 +27,14 @@ fn init() {
     let mode = set_best_vbe_mode();
     println_bios!("About to init screen");
     println_bios!("STACK LEFT: 0x{:X}", get_stack_left());
-    Screen::init(mode);
+    VbeDisplay::init(mode);
 }
 
 // TODO: Figure out why this causes things to print properly
 fn fill_screen() {
-    for ii in 0..Screen.width() {
-        for jj in 0..Screen.height() {
-            Screen.set_pixel(ii, jj, &Color::BLACK);
+    for ii in 0..VbeDisplay.width() {
+        for jj in 0..VbeDisplay.height() {
+            VbeDisplay.set_pixel(ii, jj, &Color::BLACK);
         }
     }
 }

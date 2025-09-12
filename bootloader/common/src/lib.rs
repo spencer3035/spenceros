@@ -1,5 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 
+use crate::{config::BIOS_INFO, io::framebuffer::Font};
+
 /// Config values for memory and sizes of files
 pub mod config;
 /// Global Descriptor Table logic
@@ -77,6 +79,47 @@ pub mod static_string {
 #[repr(C)]
 pub struct BiosInfo {
     pub memory_map_start: *const u8,
-    pub memory_map_count: usize,
+    pub vba_is_init: bool,
+    pub memory_map_count: u32,
+    pub display_info: DisplayInfo,
+}
+
+#[repr(C)]
+pub struct DisplayInfo {
     pub framebuffer: io::framebuffer::FramebufferInfo,
+    pub font: Font,
+    pub char_index: u32,
+}
+
+impl DisplayInfo {
+    const fn new() -> Self {
+        Self {
+            framebuffer: io::framebuffer::FramebufferInfo::null(),
+            font: [0; 0x1000],
+            char_index: 0,
+        }
+    }
+}
+
+impl BiosInfo {
+    const fn new() -> Self {
+        BiosInfo {
+            memory_map_start: 0 as *const u8,
+            vba_is_init: false,
+            memory_map_count: 0,
+            display_info: DisplayInfo::new(),
+        }
+    }
+
+    /// Init the bios info with null information
+    ///
+    /// # Safety
+    ///
+    /// This function should only be called once. It is also not thread safe
+    #[allow(dead_code)]
+    pub unsafe fn init() {
+        unsafe {
+            *BIOS_INFO = BiosInfo::new();
+        }
+    }
 }

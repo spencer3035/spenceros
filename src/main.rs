@@ -15,22 +15,25 @@ fn assert_sizes() {
     assert_eq!(
         BOOT_1.len(),
         512 * STAGE_1_SECTIONS,
-        "boot stage 1 was not correct size (0x{:x} sections)",
-        BOOT_1.len() / 0x200
+        "boot stage 1 (0x{:x}) was not correct size (0x{:x})",
+        BOOT_1.len() / 0x200,
+        STAGE_1_SECTIONS,
     );
     // Check section 2 is the correct size
     assert_eq!(
         BOOT_2.len(),
         512 * STAGE_2_SECTIONS,
-        "boot stage 2 was not correct size (0x{:x} sections)",
-        BOOT_2.len() / 0x200
+        "boot stage 2 (0x{:x}) was not correct size (0x{:x})",
+        BOOT_2.len() / 0x200,
+        STAGE_2_SECTIONS,
     );
-    // Check section 2 is the correct size
+    // Check section 3 is the correct size
     assert_eq!(
         BOOT_3.len(),
         512 * STAGE_3_SECTIONS,
-        "boot stage 3 was not correct size (0x{:x} sections)",
-        BOOT_3.len() / 0x200
+        "boot stage 3 (0x{:x}) was not correct size (0x{:x})",
+        BOOT_3.len() / 0x200,
+        STAGE_3_SECTIONS,
     );
 
     // If this fails, need to read more sectors in stage 0 or 1

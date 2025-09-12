@@ -1,28 +1,11 @@
+use static_assertions::const_assert;
+
 use super::BiosInfo;
 use core::mem::size_of;
 
-/// The start of the first stage in memory, defined by BIOS
-pub const STAGE_0_START: usize = 0x7c00;
-/// Number of 512 byte sections stage 0 takes up
-pub const STAGE_0_SECTIONS: usize = 1;
-/// Number of 512 byte sections stage 1 takes up
-pub const STAGE_1_SECTIONS: usize = 0x30;
-/// Number of 512 byte sections stage 2 takes up
-pub const STAGE_2_SECTIONS: usize = 0x10;
-/// Number of 512 byte sections stage 3 takes up
-pub const STAGE_3_SECTIONS: usize = 0x20;
+// 0x0000 to 0x1000 is a no-go zone. It contains inturrupt vector information
 
-/// Total number of boot sectors we need to read. Not including the 0th boot sector loaded into
-/// memory from the bios.
-pub const SECTORS_TO_READ: usize = STAGE_1_SECTIONS + STAGE_2_SECTIONS + STAGE_3_SECTIONS;
-
-// Pointers to memory. These should not overlap and be documented how large each of the sections
-// are needed
-
-/// Lowest address of the stack, grows down so BP should be set to STACK_END
-pub const STACK_START: *mut u8 = 0x6000 as *mut u8;
-/// Highest address of the stack, stack grows down so BP should be set to this value
-pub const STACK_END: *mut u8 = 0x7000 as *mut u8;
+// Pointers should not overlap and be documented how large the structures are
 
 /// Start of the PML4T, takes up 0x1000 = 8 * 0x200 bytes
 pub const PML4T_START: *mut [u64; 0x200] = 0x1000 as *mut [u64; 0x200];
@@ -34,10 +17,37 @@ pub const PDT_START: *mut [u64; 0x200] = 0x3000 as *mut [u64; 0x200];
 pub const PT_START: *mut [u64; 0x200] = 0x4000 as *mut [u64; 0x200];
 
 /// Pointer to the bios info. Can't get exact size without unstable feature
-pub const BIOS_INFO: *const BiosInfo = (0x5006 + 6 * 50) as *const BiosInfo;
-/// Start of the memory map, each entry is 24 bytes, number of entries is not known at runtime, but
-/// in the emulator it is 7 entries which would be 7*24=168 bytes
-pub const MEMORY_MAP_START: *mut u8 = ((0x5006 + 6 * 50) + size_of::<BiosInfo>()) as *mut u8;
+pub const BIOS_INFO: *mut BiosInfo = 0x5000 as *mut BiosInfo;
+/// Start of the memory map, each entry is 24 bytes, number of entries is not known at compiletimw,
+/// but in the emulator it is 7 entries which would be 7*24=168 bytes
+pub const MEMORY_MAP_START: *mut u8 = (0x5000 + size_of::<BiosInfo>()) as *mut u8;
+
+/// Lowest address of the stack, grows down so BP should be set to STACK_END
+pub const STACK_START: *mut u8 = 0x6000 as *mut u8;
+/// Highest address of the stack, stack grows down so BP should be set to this value
+pub const STACK_END: *mut u8 = 0x7000 as *mut u8;
+
+/// The start of the first stage in memory, defined by BIOS
+pub const STAGE_0_START: usize = 0x7c00;
+/// Number of 512 byte sections stage 0 takes up
+pub const STAGE_0_SECTIONS: usize = 1;
+/// Number of 512 byte sections stage 1 takes up
+pub const STAGE_1_SECTIONS: usize = 0x30;
+/// Number of 512 byte sections stage 2 takes up
+pub const STAGE_2_SECTIONS: usize = 0x10;
+/// Number of 512 byte sections stage 3 takes up
+pub const STAGE_3_SECTIONS: usize = 0x20;
+/// End address of bootloader
+pub const BOOTLOADER_END: usize = STAGE_0_START + 0x200 * (TOTAL_SECTORS);
+const_assert!(BOOTLOADER_END < 0x20000);
+/// End of real mode (16 bit) addresses
+pub const REAL_MODE_END: usize = STAGE_0_START + 0x200 * (STAGE_0_SECTIONS + STAGE_1_SECTIONS);
+const_assert!(REAL_MODE_END <= u16::MAX as usize);
+
+/// Total number of boot sectors we need to read. Not including the 0th boot sector loaded into
+/// memory from the bios.
+pub const SECTORS_TO_READ: usize = STAGE_1_SECTIONS + STAGE_2_SECTIONS + STAGE_3_SECTIONS;
+pub const TOTAL_SECTORS: usize = STAGE_0_SECTIONS + SECTORS_TO_READ;
 
 #[cfg(test)]
 mod test {

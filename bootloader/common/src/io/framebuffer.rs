@@ -4,14 +4,12 @@ use core::{
     sync::atomic::{AtomicBool, AtomicUsize, Ordering},
 };
 
-pub type Font = [u8; 0x1000];
-
 #[macro_export]
 macro_rules! println_vbe {
     ($($args:tt)*) => {
-        if $crate::io::framebuffer::Screen::is_init() {
+        if $crate::io::framebuffer::VbeDisplay::is_init() {
             use core::fmt::Write as _;
-            if let Err(e) = writeln!($crate::io::framebuffer::Screen, $($args)*) {
+            if let Err(e) = writeln!($crate::io::framebuffer::VbeDisplay, $($args)*) {
                 // Fall back on bios printing. We want to avoid potential double panics
                 panic!("write error : {e}");
             }
@@ -24,9 +22,9 @@ macro_rules! println_vbe {
 #[macro_export]
 macro_rules! print_vbe {
     ($($args:tt)*) => {
-        if $crate::io::framebuffer::Screen::is_init() {
+        if $crate::io::framebuffer::VbeDisplay::is_init() {
             use core::fmt::Write as _;
-            if let Err(e) = writeln!($crate::io::framebuffer::Screen, $($args)*) {
+            if let Err(e) = writeln!($crate::io::framebuffer::VbeDisplay, $($args)*) {
                 // Fall back on bios printing. We want to avoid potential double panics
                 panic!("write error : {e}");
             }
@@ -36,6 +34,8 @@ macro_rules! print_vbe {
     };
 }
 
+pub type Font = [u8; 0x1000];
+
 /// Loads BIOS VGA font into a given address
 fn set_bitmap_font_from_bios(font: &mut Font) {
     // ES:BP is address of font we want to save
@@ -44,18 +44,18 @@ fn set_bitmap_font_from_bios(font: &mut Font) {
     unsafe {
         asm!(
             // Save segment register, they get modified by bios call
-            "push			es",
+            "push es",
             // Ask BIOS to return VGA bitmap font location
             //
             // Returns pointer to font at ES:BP, as well as info in CX and DL we don't care about
-            "mov			ax, 1130h",
-            "mov			bh, 6",
-            "int			0x10",
+            "mov ax, 1130h",
+            "mov bh, 6",
+            "int 0x10",
             // Save results
-            "mov			{0:x}, bp",
-            "mov			{1:x}, es",
+            "mov {0:x}, bp",
+            "mov {1:x}, es",
             // Reset segment register
-            "pop			es",
+            "pop es",
             out(reg) bp,
             out(reg) es,
         );
@@ -72,6 +72,9 @@ fn set_bitmap_font_from_bios(font: &mut Font) {
     }
 }
 
+const CHAR_WIDTH: u16 = 8;
+const CHAR_HEIGHT: u16 = 16;
+
 pub trait FrameBuffer {
     /// Gets number of pixels wide the screen is
     fn width(&self) -> u16;
@@ -82,12 +85,12 @@ pub trait FrameBuffer {
     /// Clears the screen (sets to black)
     fn clear(&self);
     /// Gets font bitmap
-    fn font(&self) -> Option<&'static [u8; 0x1000]>;
+    fn font(&self) -> Option<&'static Font>;
     /// Shifts up rows by given number of pixels
     fn shift_up(&self, rows: u16);
     /// Sets the characer at the given position (in units of characters
     fn set_char(&self, x: u16, y: u16, c: u8) -> bool {
-        if (x + 1) * 8 > self.width() || (y + 1) * 16 > self.height() {
+        if (x + 1) * CHAR_WIDTH > self.width() || (y + 1) * CHAR_HEIGHT > self.height() {
             panic!("Bad char position {x},{y}");
             //return false;
         }
@@ -104,8 +107,8 @@ pub trait FrameBuffer {
             let mut shift = 0;
             while mask != 0 {
                 if mask & 1 != 0 {
-                    let x_px = 8 * x + 7 - shift;
-                    let y_px = 16 * y + ii as u16;
+                    let x_px = CHAR_WIDTH * x + 7 - shift;
+                    let y_px = CHAR_HEIGHT * y + ii as u16;
                     self.set_pixel(x_px, y_px, &Color::WHITE);
                 }
                 shift += 1;
@@ -173,7 +176,7 @@ impl FrameBuffer for FramebufferInfo {
     fn clear(&self) {
         self.clear_impl()
     }
-    fn font(&self) -> Option<&'static [u8; 0x1000]> {
+    fn font(&self) -> Option<&'static Font> {
         unsafe { FONT.as_ref() }
     }
     fn shift_up(&self, rows: u16) {
@@ -220,7 +223,7 @@ impl FramebufferInfo {
             && self.width != 0
             && self.height != 0
             && self.bits_per_pixel != 0
-            && self.framebuffer as u32 != 0
+            && self.framebuffer as usize != 0
     }
     fn shift_up_impl(&self, rows: u16) {
         let bytes_per_row = self.bits_per_pixel as usize * self.width() as usize / 8;
@@ -246,6 +249,7 @@ impl FramebufferInfo {
             }
         }
     }
+
     #[inline]
     fn get_pixel_address(&self, x: u16, y: u16) -> *mut u8 {
         let y_offset = y as usize * self.bytes_per_scan_line as usize;
@@ -297,13 +301,13 @@ impl FramebufferInfo {
 
 // TODO: These need to be stored more carefully, right now they depend on stuff with the stack
 static SCREEN_IS_INIT: AtomicBool = AtomicBool::new(false);
-static mut FONT: Option<[u8; 0x1000]> = None;
+static mut FONT: Option<Font> = None;
 static mut FRAME_BUFFER: Option<FramebufferInfo> = None;
 static CHAR_INDEX: AtomicUsize = AtomicUsize::new(0);
 
-pub struct Screen;
+pub struct VbeDisplay;
 
-impl FrameBuffer for Screen {
+impl FrameBuffer for VbeDisplay {
     fn width(&self) -> u16 {
         unsafe { FRAME_BUFFER.as_ref().unwrap().width() }
     }
@@ -313,7 +317,7 @@ impl FrameBuffer for Screen {
     fn set_pixel(&self, x: u16, y: u16, c: &Color) -> bool {
         unsafe { FRAME_BUFFER.as_ref().unwrap().set_pixel(x, y, c) }
     }
-    fn font(&self) -> Option<&'static [u8; 0x1000]> {
+    fn font(&self) -> Option<&'static Font> {
         unsafe { FONT.as_ref() }
     }
     fn shift_up(&self, rows: u16) {
@@ -324,7 +328,7 @@ impl FrameBuffer for Screen {
     }
 }
 
-impl Write for Screen {
+impl Write for VbeDisplay {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         for c in s.chars() {
             self.write_char_impl(c);
@@ -333,7 +337,7 @@ impl Write for Screen {
     }
 }
 
-impl Screen {
+impl VbeDisplay {
     pub fn init(framebuffer: FramebufferInfo) {
         unsafe {
             FRAME_BUFFER = Some(framebuffer);
@@ -343,7 +347,7 @@ impl Screen {
         SCREEN_IS_INIT.store(true, Ordering::Relaxed);
         // This seems to "wake up" the screen so later prints work. It may be worth investigating
         // why some prints do not display correctly without this
-        Screen.clear();
+        VbeDisplay.clear();
     }
     pub fn is_init() -> bool {
         SCREEN_IS_INIT.load(Ordering::Relaxed)
@@ -351,17 +355,17 @@ impl Screen {
     pub fn reset(&self) {
         CHAR_INDEX.store(0, Ordering::Relaxed);
         // Set everything to dark gray
-        for x in 0..Screen.width() {
-            for y in 0..Screen.height() {
-                Screen.set_pixel(x, y, &Color::new(0, 0, 0));
+        for x in 0..VbeDisplay.width() {
+            for y in 0..VbeDisplay.height() {
+                VbeDisplay.set_pixel(x, y, &Color::new(0, 0, 0));
             }
         }
     }
     fn width_char(&self) -> u16 {
-        Screen.width() / 8
+        VbeDisplay.width() / CHAR_WIDTH
     }
     fn height_char(&self) -> u16 {
-        Screen.height() / 16
+        VbeDisplay.height() / CHAR_HEIGHT
     }
     fn write_char_impl(&self, c: char) {
         let mut char_idx = CHAR_INDEX.load(Ordering::Acquire);
@@ -376,9 +380,9 @@ impl Screen {
             let y = char_idx as u16 / self.width_char();
             let x = char_idx as u16 % self.width_char();
             if c.is_ascii() {
-                Screen.set_char(x, y, c as u8);
+                VbeDisplay.set_char(x, y, c as u8);
             } else {
-                Screen.set_char(x, y, b'?');
+                VbeDisplay.set_char(x, y, b'?');
             }
             char_idx += 1;
         }

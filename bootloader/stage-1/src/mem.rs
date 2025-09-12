@@ -1,4 +1,3 @@
-
 use core::arch::asm;
 
 use common::config::MEMORY_MAP_START;

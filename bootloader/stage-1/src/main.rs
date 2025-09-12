@@ -8,10 +8,10 @@
 use core::arch::asm;
 
 use common::config::MEMORY_MAP_START;
-use common::println_bios;
 use common::static_string::StaticString;
 use common::{gdt::*, println_vbe};
 use common::{print_bios, print_vbe};
+use common::{println_bios, BiosInfo};
 
 use common::io::bios::{print_char, print_chars, print_hex, print_hex32};
 use vbe::init_graphical;
@@ -27,7 +27,12 @@ use utils::*;
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
-    enable_a20();
+    unsafe {
+        // For some reason this seems to break when we move it around/mark the function as safe?
+        enable_a20();
+        // SAFETY: Should only be called once, we call it here
+        BiosInfo::init();
+    }
 
     if !has_cpuid() {
         panic!("CPUID not present");

@@ -12,9 +12,9 @@ use common::io::bios::{print_char, print_chars, print_hex, print_hex32};
 #[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    use common::io::framebuffer::Screen;
+    use common::io::framebuffer::VbeDisplay;
 
-    if Screen::is_init() {
+    if VbeDisplay::is_init() {
         println_vbe!("PANIC: {info}");
     } else {
         println_bios!("PANIC: {info}");
@@ -37,7 +37,7 @@ pub fn prompt_continue() {
 
 /// Check if A20 is enabled
 #[inline(always)]
-pub fn enable_a20() {
+pub unsafe fn enable_a20() {
     // enable A20-Line via IO-Port 92, might not work on all motherboards
     let al: u8;
     unsafe {
