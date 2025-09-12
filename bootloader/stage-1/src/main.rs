@@ -30,8 +30,9 @@ pub extern "C" fn _start(_disk_number: u16) {
     unsafe {
         // For some reason this seems to break when we move it around/mark the function as safe?
         enable_a20();
+        // Calling this causes a fail?
         // SAFETY: Should only be called once, we call it here
-        BiosInfo::init();
+        // BiosInfo::init();
     }
 
     if !has_cpuid() {
