@@ -1,6 +1,7 @@
 ENTRY(_start)
 
 SECTIONS {
+    /* STAGE_0_START + 0x200 */
     . = 0x7c00 + 0x200;
 
     .start :
@@ -30,7 +31,8 @@ SECTIONS {
     }
 
     _second_stage_end = .;
-    . = 0x7c00 + 0x6200 - 0x2;
+    /* STAGE_0_START + 0x200 + 0x200 * STAGE_1_SECTIONS - 0x2 */
+    . = 0x7c00 + 0x200 + 0x200 * 0x30 - 0x2;
     .end_marker :
     {
         SHORT(0xdead)

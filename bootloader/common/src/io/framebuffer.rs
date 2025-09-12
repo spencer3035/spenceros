@@ -295,6 +295,7 @@ impl FramebufferInfo {
     }
 }
 
+// TODO: These need to be stored more carefully, right now they depend on stuff with the stack
 static SCREEN_IS_INIT: AtomicBool = AtomicBool::new(false);
 static mut FONT: Option<[u8; 0x1000]> = None;
 static mut FRAME_BUFFER: Option<FramebufferInfo> = None;

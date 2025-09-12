@@ -1,5 +1,3 @@
-mod vbe_impl;
-
 use core::arch::asm;
 use core::mem::MaybeUninit;
 
@@ -8,19 +6,18 @@ use common::io::framebuffer::FrameBuffer;
 use common::io::framebuffer::FramebufferInfo;
 use common::io::framebuffer::Screen;
 use common::println_bios;
-use common::println_vbe;
 
-use crate::prompt_continue;
+use crate::utils::get_stack_left;
 
 /// Enters the best fit VBE mode
 ///
 /// SAFETY: Writes to static variables, can't be used accross threads
+// #[inline(never)]
 pub fn init_graphical() {
     init();
 }
 
 fn init() {
-    println_bios!("INIT");
     assert_eq!(size_of::<VesaVbeBlockDef>(), 512, "VbeInfoBlock bad size");
     assert_eq!(
         size_of::<VesaVbeModeDef>(),
@@ -28,11 +25,9 @@ fn init() {
         "VesaModeInfoBlock bad size"
     );
     let mode = set_best_vbe_mode();
-    println_bios!("Ready to init screen");
-    prompt_continue();
+    println_bios!("About to init screen");
+    println_bios!("STACK LEFT: 0x{:X}", get_stack_left());
     Screen::init(mode);
-    println_vbe!("Init screen");
-    loop {}
 }
 
 // TODO: Figure out why this causes things to print properly
@@ -58,7 +53,6 @@ macro_rules! check_vbe_ax {
 
 /// Gets the best vbe mode given desired width, height, depth, and a list of supported mode ids
 fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> FramebufferInfo {
-    println_bios!("Getting best mode");
     let mut diff = u16::MAX;
     let mut best_mode = None;
 
@@ -96,7 +90,6 @@ fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Framebuff
 
 /// SAFETY: Can only be called by one thread at a time, contains mutable static information
 fn set_best_vbe_mode() -> FramebufferInfo {
-    println_bios!("SET BEST MODES");
     // Get the best mode relative to these target numbers
     let (width, height, depth) = get_preferred_width_height_depth();
 
@@ -107,13 +100,6 @@ fn set_best_vbe_mode() -> FramebufferInfo {
     const USE_LINEAR_FRAME_BUFFER: u16 = 0x4000;
     #[allow(dead_code)]
     const USE_CRTC_INFO_BLOCK: u16 = 1 << 10;
-    println_bios!(
-        "Got (width, height) = ({}, {})",
-        best_mode.width,
-        best_mode.height
-    );
-    println_bios!("About to set graphical mode");
-    prompt_continue();
     // Set the mode
     unsafe {
         let mut ax = 0x4f02;
@@ -335,18 +321,12 @@ impl VesaVbeBlockDef {
     /// Checks if block is valid
     fn check(&self) -> Result<(), VbeError> {
         if &self.signature != b"VESA" {
-            // println_bios!("{:?} != {:?}", self.signature, b"VESA");
             // Check signature
             Err(VbeError::SignatureNotValid)
         } else if self.version != 0x300 {
             // Check version
             Err(VbeError::NotVerson3)
         } else if self.capabillities != [1, 0, 0, 0] {
-            common::println_bios!("self={:?}", self.capabillities);
-            common::println_bios!("arr ={:?}", [1, 0, 0, 0]);
-            for (ii, val) in self.capabillities.iter().enumerate() {
-                common::println_bios!("{ii}: {val}");
-            }
             // Check capabilities are as expected
             Err(VbeError::BadCapabilities)
         } else {
