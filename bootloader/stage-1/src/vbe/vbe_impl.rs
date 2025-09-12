@@ -215,10 +215,10 @@ fn get_preferred_width_height_depth() -> (u16, u16, u8) {
     assert_eq!(size_of::<EdidData>(), 0x80);
 
     let mut ax = 0x4f15;
-    let mut edid_data: EdidData;
+    let edid_data: EdidData;
     unsafe {
         // SAFETY: Edid data is init by bios call
-        edid_data = MaybeUninit::uninit().assume_init();
+        let mut edid_data_uninit = MaybeUninit::uninit();
         asm!(
             "mov bl, 0x01",
             "xor cx, cx",
@@ -226,8 +226,10 @@ fn get_preferred_width_height_depth() -> (u16, u16, u8) {
             "mov es, cx",
             "int 0x10",
             inout("ax") ax,
-            in("di") &mut edid_data,
+            in("di") &mut edid_data_uninit,
         );
+
+        edid_data = edid_data_uninit.assume_init()
     };
 
     if ax != 0x4f {
@@ -306,7 +308,7 @@ impl VesaVbeBlockDef {
 
     /// Loads VBE into new structure
     fn new() -> Self {
-        let mut res: Self;
+        let res: Self;
         let mut ax: u16 = 0x4f00;
 
         // SAFETY: result is init by the assembly call that takes a pointer to the result. It is
@@ -314,12 +316,13 @@ impl VesaVbeBlockDef {
         // the compiler the correct thing is happening. It is additionally checked for validity
         // after and panics if invalid.
         unsafe {
-            res = MaybeUninit::uninit().assume_init();
+            let mut res_uninit = MaybeUninit::uninit();
             asm!(
                 "int 0x10",
                 inout("ax") ax,
-                in("di") &mut res
+                in("di") &mut res_uninit
             );
+            res = res_uninit.assume_init();
         };
 
         check_vbe_ax!(ax, "VBE load fail code 0x{ax:x}");
@@ -352,18 +355,19 @@ impl VesaVbeBlockDef {
 
 /// Reads a VBE mode to frame buffer
 fn load(framebuffer: &mut FramebufferInfo, mode_id: u16) -> Result<(), VbeError> {
-    let mut vbe_mode_def: VesaVbeModeDef;
+    let vbe_mode_def: VesaVbeModeDef;
     let mut ax = 0x4f01;
 
     unsafe {
         // SAFETY: vbe is populated with bios call below and checked for validity immediately after
-        vbe_mode_def = MaybeUninit::uninit().assume_init();
+        let mut vbe_mode_def_uninit: MaybeUninit<VesaVbeModeDef> = MaybeUninit::uninit();
         asm!(
             "int 0x10",
             inout("ax") ax,
             in("cx") mode_id,
-            in("di") &mut vbe_mode_def
+            in("di") &mut vbe_mode_def_uninit
         );
+        vbe_mode_def = vbe_mode_def_uninit.assume_init();
     }
     check_vbe_ax!(ax, "VBE mode fail");
     vbe_mode_def.check()?;

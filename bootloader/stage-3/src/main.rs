@@ -3,12 +3,14 @@
 
 use core::arch::asm;
 
+#[allow(unused_macros)]
 macro_rules! println {
     ($($args:tt)*) => {
         common::println_screen!($($args)*);
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! print {
     ($($args:tt)*) => {
         common::print_screen!($($args)*);
