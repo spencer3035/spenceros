@@ -1,5 +1,7 @@
 use core::arch::asm;
 use core::mem::MaybeUninit;
+use core::ptr::addr_of;
+use core::ptr::addr_of_mut;
 
 use common::io::framebuffer::Color;
 use common::io::framebuffer::FrameBuffer;
@@ -93,7 +95,8 @@ fn set_best_vbe_mode() -> FramebufferInfo {
     // Get the best mode relative to these target numbers
     let (width, height, depth) = get_preferred_width_height_depth();
 
-    let vbe_block = VesaVbeBlockDef::new();
+    // SAFETY: This is the only time this function is called
+    let vbe_block = unsafe { VesaVbeBlockDef::init_and_get() };
     let modes = vbe_block.get_modes();
     let best_mode = get_best_mode(width, height, depth, modes);
 
@@ -254,8 +257,10 @@ fn get_preferred_width_height_depth() -> (u16, u16, u8) {
     (width, height, depth)
 }
 
+/// Static location to store the information at runtime
+static mut VESA_VBE_BLOCK_DEF: VesaVbeBlockDef = VesaVbeBlockDef::null();
+
 /// Defininition/memory layout for the Vesa VBE info block 3.0
-#[allow(dead_code)]
 #[repr(C, packed)]
 pub struct VesaVbeBlockDef {
     // b"VESA" or [86, 69, 83, 65] or [0x56, 0x45, 0x53, 0x41]
@@ -274,8 +279,6 @@ pub struct VesaVbeBlockDef {
     reserved: [u8; 222],
     oem_data: [u8; 256],
 }
-
-// static VESA_VBE_BLOCK_DEF: VesaVbeBlockDef = VesaVbeBlockDef::null();
 
 impl VesaVbeBlockDef {
     fn get_modes(&self) -> &[u16] {
@@ -313,24 +316,27 @@ impl VesaVbeBlockDef {
         }
     }
 
-    /// Loads VBE into new structure
-    fn new() -> Self {
+    /// Loads VBE from BIOS and returns a reference to it
+    ///
+    /// # SAFETY: This should only be called once. It mutates a static variable and returns a
+    unsafe fn init_and_get() -> &'static Self {
         let mut ax: u16 = 0x4f00;
-        let res: Self = unsafe {
-            // SAFETY: result is init by the assembly call that takes a pointer to the result. The
-            // layout of Self needs to match the spec.
-            let mut res = MaybeUninit::uninit();
+        unsafe {
+            // SAFETY: The layout of Self needs to match the spec
+            // https://wiki.osdev.org/VESA_Video_Modes
             asm!(
                 "int 0x10",
                 inout("ax") ax,
-                in("di") &mut res
+                in("di") addr_of_mut!(VESA_VBE_BLOCK_DEF)
             );
-            res.assume_init()
         };
 
         check_vbe_ax!(ax, "VBE load fail code 0x{ax:x}");
-        res.check().unwrap();
-        res
+        unsafe {
+            VESA_VBE_BLOCK_DEF.check().unwrap();
+            // SAFETY: Pointer should be aligned because it is declared as a static
+            addr_of!(VESA_VBE_BLOCK_DEF).as_ref().unwrap()
+        }
     }
 
     /// Checks if block is valid
