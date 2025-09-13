@@ -3,20 +3,23 @@ use core::arch::asm;
 use common::config::STACK_END;
 use common::io::framebuffer::VbeDisplay;
 use common::println_bios;
-use common::{gdt::*, println_vbe};
 use common::{print_bios, print_vbe};
 
 use common::config::STACK_START;
-use common::io::bios::{print_char, print_chars, print_hex, print_hex32};
 
 // TODO: Make sure correct println is used
 #[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    if VbeDisplay::is_init() {
-        println_vbe!("PANIC: {info}");
-    } else {
-        println_bios!("PANIC: {info}");
+    use common::println_vbe;
+
+    match VbeDisplay::is_init() {
+        true => {
+            println_vbe!("PANIC: {info}");
+        }
+        false => {
+            println_bios!("PANIC: {info}");
+        }
     }
     loop {
         unsafe { asm!("hlt") }
@@ -101,7 +104,7 @@ pub fn has_cpuid() -> bool {
 pub fn get_stack_used() -> u32 {
     let mut sp: u32;
     unsafe {
-        asm!("mov {sp}, esp",  sp = out(reg_abcd) sp);
+        asm!("mov {sp:e}, esp",  sp = out(reg_abcd) sp);
     }
     STACK_END as u32 - sp
 }
@@ -135,7 +138,7 @@ pub fn poll_keypress() -> Option<char> {
             inout("dx") key_present,
         );
     }
-    let ch = (ax & 0xFF) as u8 as char;
+    let _ch = (ax & 0xFF) as u8 as char;
     if key_present == 0 {
         None
     } else {

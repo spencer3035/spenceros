@@ -1,3 +1,4 @@
+#[cfg(test)]
 use static_assertions::const_assert;
 
 use crate::VbeDisplayInfo;
@@ -12,6 +13,7 @@ use core::mem::size_of;
 /// VBE Display info, used to print stuff to screen in VBE mode
 pub const VBE_DISPLAY_INFO: *mut VbeDisplayInfo = 0x3000 as *mut VbeDisplayInfo;
 pub const VBE_DISPLAY_INFO_END: usize = 0x3000 + size_of::<VbeDisplayInfo>();
+#[cfg(test)]
 const_assert!(VBE_DISPLAY_INFO_END <= 0x4000);
 
 /// Font for printing in VBE mode
@@ -35,6 +37,7 @@ pub const STAGE_0_SECTIONS: usize = 1;
 /// Number of 512 byte sections stage 1 takes up
 pub const STAGE_1_SECTIONS: usize = 0x30;
 pub const REAL_MODE_END: usize = STAGE_0_START + 0x200 * (STAGE_0_SECTIONS + STAGE_1_SECTIONS);
+#[cfg(test)]
 const_assert!(REAL_MODE_END <= u16::MAX as usize);
 
 /// ---------------------------------------------
@@ -47,6 +50,7 @@ pub const STAGE_2_SECTIONS: usize = 0x10;
 pub const STAGE_3_SECTIONS: usize = 0x20;
 /// End address of bootloader
 pub const BOOTLOADER_END: usize = STAGE_0_START + 0x200 * (TOTAL_SECTORS);
+#[cfg(test)]
 const_assert!(BOOTLOADER_END < 0x20000);
 /// End of real mode (16 bit) addresses
 /// Total number of boot sectors we need to read. Not including the 0th boot sector loaded into

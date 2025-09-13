@@ -2,17 +2,12 @@
 #![no_main]
 #![feature(const_trait_impl)]
 #![deny(unsafe_op_in_unsafe_fn)]
-// TODO: Remove
-#![allow(unused)]
 
 use core::arch::asm;
 
-use common::static_string::StaticString;
+use common::BiosInfo;
 use common::{gdt::*, println_vbe};
-use common::{print_bios, print_vbe};
-use common::{println_bios, BiosInfo};
 
-use common::io::bios::{print_char, print_chars, print_hex, print_hex32};
 use vbe::init_graphical;
 
 pub mod mem;

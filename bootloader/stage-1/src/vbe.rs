@@ -1,5 +1,4 @@
 use core::arch::asm;
-use core::mem::MaybeUninit;
 use core::ptr::addr_of;
 use core::ptr::addr_of_mut;
 
@@ -9,12 +8,8 @@ use common::io::framebuffer::FrameBuffer;
 use common::io::framebuffer::FramebufferInfo;
 use common::io::framebuffer::VbeDisplay;
 use common::println_bios;
-use common::println_vbe;
-use common::BiosInfo;
 use common::VbeDisplayInfo;
 
-use crate::utils::get_stack_left;
-use crate::utils::get_stack_used;
 use crate::utils::prompt_continue;
 
 /// Inits the VBE screen, should only be called once

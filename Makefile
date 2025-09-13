@@ -9,6 +9,4 @@ build:
 	cargo build
 
 test: 
-	for p in ${PACKAGES}; do
-		cargo test --package $$p
-	done
+	for p in ${PACKAGES}; do cargo test --package $$p ;  done
