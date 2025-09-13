@@ -123,4 +123,30 @@ impl BiosInfo {
             *BIOS_INFO = BiosInfo::new();
         }
     }
+
+    /// Gets mutable reference to info
+    ///
+    /// # Safety
+    ///
+    /// The following two conditions need to be met:
+    /// - [Self::init()] has been called to initialize the memory
+    /// - Need to manually enforce borrowing rules. Only one mutable reference can exist at a time
+    pub unsafe fn get_mut() -> &'static mut Self {
+        {
+            BIOS_INFO.as_mut().unwrap()
+        }
+    }
+
+    /// Gets reference to info
+    ///
+    /// # Safety
+    ///
+    /// The following two conditions need to be met:
+    /// - [Self::init()] has been called to initialize the memory
+    /// - Need to manually enforce borrowing rules.
+    pub unsafe fn get() -> &'static Self {
+        {
+            BIOS_INFO.as_ref().unwrap()
+        }
+    }
 }

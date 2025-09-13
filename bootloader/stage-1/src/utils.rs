@@ -36,7 +36,7 @@ pub fn prompt_continue() {
 }
 
 /// Check if A20 is enabled
-pub unsafe fn enable_a20() {
+pub fn enable_a20() {
     // enable A20-Line via IO-Port 92, might not work on all motherboards
     let al: u8;
     unsafe {

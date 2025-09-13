@@ -3,11 +3,13 @@ use core::mem::MaybeUninit;
 use core::ptr::addr_of;
 use core::ptr::addr_of_mut;
 
+use common::config::FONT;
 use common::io::framebuffer::Color;
 use common::io::framebuffer::FrameBuffer;
 use common::io::framebuffer::FramebufferInfo;
 use common::io::framebuffer::VbeDisplay;
 use common::println_bios;
+use common::BiosInfo;
 
 use crate::utils::get_stack_left;
 
@@ -15,21 +17,41 @@ use crate::utils::get_stack_left;
 ///
 /// SAFETY: Writes to static variables, can't be used accross threads
 // #[inline(never)]
-pub fn init_graphical() {
-    init();
+pub fn init_graphical(info: &mut BiosInfo) {
+    init(info);
 }
 
-fn init() {
+fn init(info: &mut BiosInfo) {
     assert_eq!(size_of::<VesaVbeBlockDef>(), 512, "VbeInfoBlock bad size");
     assert_eq!(
         size_of::<VesaVbeModeDef>(),
         256,
         "VesaModeInfoBlock bad size"
     );
-    let mode = set_best_vbe_mode();
+    // Get the best mode relative to these target numbers
+    let (width, height, depth) = get_preferred_width_height_depth();
+
+    // SAFETY: This is the only time this function is called
+    let vbe_block = unsafe { VesaVbeBlockDef::init_and_get() };
+    let modes = vbe_block.get_modes();
+    let best_mode = get_best_mode(width, height, depth, modes).unwrap();
+
+    // SAFETY: framebuffer only exists within the scope
+    unsafe {
+        // Read best mode to structure
+        let framebuffer = match load_framebuffer(best_mode) {
+            Ok(f) => f,
+            Err(e) => panic!("couldn't load mode {best_mode}: {e}"),
+        };
+        set_vbe_mode(framebuffer);
+        info.display_info.framebuffer = framebuffer.clone();
+    }
+
+    set_bitmap_font_from_bios();
     println_bios!("About to init screen");
     println_bios!("STACK LEFT: 0x{:X}", get_stack_left());
-    VbeDisplay::init(mode);
+    VbeDisplay::init();
+    // info.display_info.is_init = true;
 }
 
 // TODO: Figure out why this causes things to print properly
@@ -37,6 +59,43 @@ fn fill_screen() {
     for ii in 0..VbeDisplay.width() {
         for jj in 0..VbeDisplay.height() {
             VbeDisplay.set_pixel(ii, jj, &Color::BLACK);
+        }
+    }
+}
+
+/// Loads BIOS VGA font into a given address
+fn set_bitmap_font_from_bios() {
+    // ES:BP is address of font we want to save
+    let mut bp: u16;
+    let mut es: u16;
+    unsafe {
+        asm!(
+            // Save segment register, they get modified by bios call
+            "push es",
+            // Ask BIOS to return VGA bitmap font location
+            //
+            // Returns pointer to font at ES:BP, as well as info in CX and DL we don't care about
+            "mov ax, 1130h",
+            "mov bh, 6",
+            "int 0x10",
+            // Save results
+            "mov {0:x}, bp",
+            "mov {1:x}, es",
+            // Reset segment register
+            "pop es",
+            out(reg) bp,
+            out(reg) es,
+        );
+    }
+
+    // Convert segmented addressing to linear address
+    let address = (16 * (es as usize) + bp as usize) as *const u8;
+    let target: &mut [u8; 0x1000] = unsafe { (FONT as *mut [u8; 0x1000]).as_mut().unwrap() };
+
+    // Save font
+    for (ii, tgt) in target.iter_mut().enumerate() {
+        unsafe {
+            *tgt = address.add(ii).read();
         }
     }
 }
@@ -53,53 +112,40 @@ macro_rules! check_vbe_ax {
     };
 }
 
+static mut FRAME_BUFFER_INFO: FramebufferInfo = FramebufferInfo::null();
+
 /// Gets the best vbe mode given desired width, height, depth, and a list of supported mode ids
-fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> FramebufferInfo {
+fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Option<u16> {
     let mut diff = u16::MAX;
     let mut best_mode = None;
 
-    // SAFETY: This gets init with the load() function at the beginning of each loop. If it
-    let mut framebuffer: FramebufferInfo = FramebufferInfo::null();
-
     for mode_id in modes.iter() {
-        if let Err(_) = load(&mut framebuffer, *mode_id) {
-            continue;
-        }
-        // Check the residual
-        let mode_diff = framebuffer.width.abs_diff(width) + framebuffer.height.abs_diff(height);
-        if framebuffer.bits_per_pixel == depth && mode_diff <= diff {
-            diff = mode_diff;
-            best_mode = Some(*mode_id);
+        // SAFETY: framebuffer only exists within the scope
+        unsafe {
+            let framebuffer = match load_framebuffer(*mode_id) {
+                Err(e) => {
+                    println_bios!("{e}");
+                    continue;
+                }
+                Ok(f) => f,
+            };
+            // Check the residual
+            let mode_diff = framebuffer.width.abs_diff(width) + framebuffer.height.abs_diff(height);
+            if framebuffer.bits_per_pixel == depth && mode_diff <= diff {
+                diff = mode_diff;
+                best_mode = Some(*mode_id);
+            }
         }
     }
 
     if modes.is_empty() || diff == u16::MAX || best_mode.is_none() {
         panic!("no VBE modes found");
     }
-    let best_mode = best_mode.unwrap();
-
-    // Read best mode to structure
-    if let Err(e) = load(&mut framebuffer, best_mode) {
-        panic!("couldn't load mode {best_mode}: {e:?}");
-    }
-
-    if !framebuffer.is_valid() {
-        panic!("Got invalid framebuffer!");
-    }
-
-    framebuffer
+    best_mode
 }
 
 /// SAFETY: Can only be called by one thread at a time, contains mutable static information
-fn set_best_vbe_mode() -> FramebufferInfo {
-    // Get the best mode relative to these target numbers
-    let (width, height, depth) = get_preferred_width_height_depth();
-
-    // SAFETY: This is the only time this function is called
-    let vbe_block = unsafe { VesaVbeBlockDef::init_and_get() };
-    let modes = vbe_block.get_modes();
-    let best_mode = get_best_mode(width, height, depth, modes);
-
+fn set_vbe_mode(best_mode: &FramebufferInfo) {
     const USE_LINEAR_FRAME_BUFFER: u16 = 0x4000;
     #[allow(dead_code)]
     const USE_CRTC_INFO_BLOCK: u16 = 1 << 10;
@@ -117,8 +163,6 @@ fn set_best_vbe_mode() -> FramebufferInfo {
         // display correctly because the mode would be the same.
         check_vbe_ax!(ax, "VBE load fail code : 0x{ax:x}");
     }
-
-    best_mode
 }
 
 #[derive(Debug)]
@@ -357,7 +401,11 @@ impl VesaVbeBlockDef {
 }
 
 /// Reads a VBE mode to frame buffer
-fn load(framebuffer: &mut FramebufferInfo, mode_id: u16) -> Result<(), VbeError> {
+///
+/// # SAFETY: This uses a static variable to return references, so there should only be one
+/// refernce to the return value at a time (don't call this function twice in the same scope or
+/// deeper).
+unsafe fn load_framebuffer(mode_id: u16) -> Result<&'static FramebufferInfo, VbeError> {
     let vbe_mode_def: VesaVbeModeDef;
     let mut ax = 0x4f01;
 
@@ -385,16 +433,18 @@ fn load(framebuffer: &mut FramebufferInfo, mode_id: u16) -> Result<(), VbeError>
         return Err(VbeError::ModeNotGood);
     }
 
-    *framebuffer = FramebufferInfo {
-        mode_id,
-        bits_per_pixel: vbe_mode_def.bits_per_pixel,
-        bytes_per_scan_line: vbe_mode_def.bytes_per_scan_line,
-        width: vbe_mode_def.width,
-        height: vbe_mode_def.height,
-        framebuffer: vbe_mode_def.framebuffer as *mut u8,
-    };
+    unsafe {
+        FRAME_BUFFER_INFO = FramebufferInfo {
+            mode_id,
+            bits_per_pixel: vbe_mode_def.bits_per_pixel,
+            bytes_per_scan_line: vbe_mode_def.bytes_per_scan_line,
+            width: vbe_mode_def.width,
+            height: vbe_mode_def.height,
+            framebuffer: vbe_mode_def.framebuffer as *mut u8,
+        };
+    }
 
-    Ok(())
+    unsafe { Ok(addr_of!(FRAME_BUFFER_INFO).as_ref().unwrap()) }
 }
 
 /// Defininition/memory layout for the VesaVbeMode 3.0
@@ -480,8 +530,60 @@ const LINEAR_FRAME_BUFFER: u16 = 1 << 7;
 
 impl VesaVbeModeDef {
     fn check(&self) -> Result<(), VbeError> {
-        // TODO: Check for validity
+        if self.framebuffer == 0 {
+            return Err(VbeError::NullPointer);
+        }
         Ok(())
+    }
+
+    const fn null() -> Self {
+        Self {
+            mode_attributes: 0,
+            window_a: 0,
+            window_b: 0,
+            granularity: 0,
+            window_size: 0,
+            segment_a: 0,
+            segment_b: 0,
+            win_func_ptr: 0,
+            bytes_per_scan_line: 0,
+            width: 0,
+            height: 0,
+            w_char: 0,
+            y_char: 0,
+            planes: 0,
+            bits_per_pixel: 0,
+            banks: 0,
+            memory_model: 0,
+            bank_size: 0,
+            image_pages: 0,
+            reserved0: 0,
+            red_mask: 0,
+            red_position: 0,
+            green_mask: 0,
+            green_position: 0,
+            blue_mask: 0,
+            blue_position: 0,
+            reserved_mask: 0,
+            reserved_position: 0,
+            direct_color_attributes: 0,
+            framebuffer: 0,
+            off_screen_mem_off: 0,
+            off_screen_mem_size: 0,
+            linear_bytes_per_scan_line: 0,
+            bank_images_pages: 0,
+            linear_images_pages: 0,
+            linear_red_mask_size: 0,
+            linear_red_field_pos: 0,
+            linear_green_mask_size: 0,
+            linear_green_field_pos: 0,
+            linear_blue_mask_size: 0,
+            linear_blue_field_pos: 0,
+            linear_rsv_mask_size: 0,
+            linear_rsv_field_pos: 0,
+            max_pixel_clock: 0,
+            reserved1: [0; 190],
+        }
     }
 }
 
@@ -512,4 +614,17 @@ pub enum VbeError {
     SignatureNotValid,
     NotVerson3,
     BadCapabilities,
+    NullPointer,
+}
+
+impl core::fmt::Display for VbeError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            VbeError::ModeNotGood => write!(f, "invalid mode"),
+            VbeError::SignatureNotValid => write!(f, "signature not VESA"),
+            VbeError::NotVerson3 => write!(f, "not version 3"),
+            VbeError::BadCapabilities => write!(f, "capabilities not supported"),
+            VbeError::NullPointer => write!(f, "null pointer (not init?)"),
+        }
+    }
 }

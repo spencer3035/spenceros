@@ -1,7 +1,11 @@
 use core::{
-    arch::asm,
     fmt::Write,
-    sync::atomic::{AtomicBool, AtomicUsize, Ordering},
+    sync::atomic::{AtomicUsize, Ordering},
+};
+
+use crate::{
+    config::{BIOS_INFO, FONT},
+    BiosInfo,
 };
 
 #[macro_export]
@@ -35,42 +39,6 @@ macro_rules! print_vbe {
 }
 
 pub type Font = [u8; 0x1000];
-
-/// Loads BIOS VGA font into a given address
-fn set_bitmap_font_from_bios(font: &mut Font) {
-    // ES:BP is address of font we want to save
-    let mut bp: u16;
-    let mut es: u16;
-    unsafe {
-        asm!(
-            // Save segment register, they get modified by bios call
-            "push es",
-            // Ask BIOS to return VGA bitmap font location
-            //
-            // Returns pointer to font at ES:BP, as well as info in CX and DL we don't care about
-            "mov ax, 1130h",
-            "mov bh, 6",
-            "int 0x10",
-            // Save results
-            "mov {0:x}, bp",
-            "mov {1:x}, es",
-            // Reset segment register
-            "pop es",
-            out(reg) bp,
-            out(reg) es,
-        );
-    }
-
-    // Convert segmented addressing to linear address
-    let address = (16 * (es as usize) + bp as usize) as *const u8;
-
-    // Save font
-    for (ii, tgt) in font.iter_mut().enumerate() {
-        unsafe {
-            *tgt = address.add(ii).read();
-        }
-    }
-}
 
 const CHAR_WIDTH: u16 = 8;
 const CHAR_HEIGHT: u16 = 16;
@@ -184,7 +152,7 @@ impl FrameBuffer for FramebufferInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FramebufferInfo {
     pub mode_id: u16,
@@ -225,6 +193,7 @@ impl FramebufferInfo {
             && self.bits_per_pixel != 0
             && self.framebuffer as usize != 0
     }
+
     fn shift_up_impl(&self, rows: u16) {
         let bytes_per_row = self.bits_per_pixel as usize * self.width() as usize / 8;
         for row in 0..(self.height().saturating_sub(rows)) {
@@ -300,31 +269,49 @@ impl FramebufferInfo {
 }
 
 // TODO: These need to be stored more carefully, right now they depend on stuff with the stack
-static SCREEN_IS_INIT: AtomicBool = AtomicBool::new(false);
-static mut FONT: Option<Font> = None;
-static mut FRAME_BUFFER: Option<FramebufferInfo> = None;
 static CHAR_INDEX: AtomicUsize = AtomicUsize::new(0);
 
 pub struct VbeDisplay;
 
 impl FrameBuffer for VbeDisplay {
     fn width(&self) -> u16 {
-        unsafe { FRAME_BUFFER.as_ref().unwrap().width() }
+        unsafe { BIOS_INFO.as_ref().unwrap().display_info.framebuffer.width() }
     }
     fn height(&self) -> u16 {
-        unsafe { FRAME_BUFFER.as_ref().unwrap().height() }
+        unsafe {
+            BIOS_INFO
+                .as_ref()
+                .unwrap()
+                .display_info
+                .framebuffer
+                .height()
+        }
     }
     fn set_pixel(&self, x: u16, y: u16, c: &Color) -> bool {
-        unsafe { FRAME_BUFFER.as_ref().unwrap().set_pixel(x, y, c) }
+        unsafe {
+            BIOS_INFO
+                .as_ref()
+                .unwrap()
+                .display_info
+                .framebuffer
+                .set_pixel(x, y, c)
+        }
     }
     fn font(&self) -> Option<&'static Font> {
         unsafe { FONT.as_ref() }
     }
     fn shift_up(&self, rows: u16) {
-        unsafe { FRAME_BUFFER.as_ref().unwrap().shift_up(rows) }
+        unsafe {
+            BIOS_INFO
+                .as_ref()
+                .unwrap()
+                .display_info
+                .framebuffer
+                .shift_up(rows)
+        }
     }
     fn clear(&self) {
-        unsafe { FRAME_BUFFER.as_ref().unwrap().clear() }
+        unsafe { BIOS_INFO.as_ref().unwrap().display_info.framebuffer.clear() }
     }
 }
 
@@ -338,19 +325,14 @@ impl Write for VbeDisplay {
 }
 
 impl VbeDisplay {
-    pub fn init(framebuffer: FramebufferInfo) {
-        unsafe {
-            FRAME_BUFFER = Some(framebuffer);
-            FONT = Some([0; 0x1000]);
-            set_bitmap_font_from_bios(FONT.as_mut().unwrap());
-        }
-        SCREEN_IS_INIT.store(true, Ordering::Relaxed);
+    /// Init's the screen
+    pub fn init() {
         // This seems to "wake up" the screen so later prints work. It may be worth investigating
         // why some prints do not display correctly without this
         VbeDisplay.clear();
     }
     pub fn is_init() -> bool {
-        SCREEN_IS_INIT.load(Ordering::Relaxed)
+        unsafe { BiosInfo::get().display_info.framebuffer.is_valid() }
     }
     pub fn reset(&self) {
         CHAR_INDEX.store(0, Ordering::Relaxed);
