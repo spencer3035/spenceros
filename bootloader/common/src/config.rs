@@ -1,11 +1,18 @@
 use static_assertions::const_assert;
 
+use crate::VbeDisplayInfo;
+
 use super::BiosInfo;
 use core::mem::size_of;
 
 // 0x0000 to 0x1000 is a no-go zone. It contains inturrupt vector information
 
 // Pointers should not overlap and be documented how large the structures are
+
+/// VBE Display info, used to print stuff to screen in VBE mode
+pub const VBE_DISPLAY_INFO: *mut VbeDisplayInfo = 0x3000 as *mut VbeDisplayInfo;
+pub const VBE_DISPLAY_INFO_END: usize = 0x3000 + size_of::<VbeDisplayInfo>();
+const_assert!(VBE_DISPLAY_INFO_END <= 0x4000);
 
 /// Font for printing in VBE mode
 pub const FONT: *mut [u8; 0x1000] = 0x4000 as *mut [u8; 0x1000];
@@ -14,7 +21,7 @@ pub const FONT: *mut [u8; 0x1000] = 0x4000 as *mut [u8; 0x1000];
 pub const BIOS_INFO: *mut BiosInfo = 0x5000 as *mut BiosInfo;
 /// Start of the memory map, each entry is 24 bytes, number of entries is not known at compiletimw,
 /// but in the emulator it is 7 entries which would be 7*24=168 bytes
-pub const BIOS_INFO_END: *mut u8 = (0x5000 + size_of::<BiosInfo>()) as *mut u8;
+pub const BIOS_INFO_END: usize = 0x5000 + size_of::<BiosInfo>();
 
 /// Lowest address of the stack, grows down so BP should be set to STACK_END
 pub const STACK_START: *mut u8 = 0x6000 as *mut u8;
@@ -64,7 +71,7 @@ mod test {
     fn test_stack_in_range() {
         assert!((STACK_START as usize) < (u16::MAX as usize));
         assert!((STACK_END as usize) < (u16::MAX as usize));
-        assert!((BIOS_INFO_END as usize) < (STACK_START as usize));
+        assert!((BIOS_INFO_END) < (STACK_START as usize));
     }
 
     #[test]

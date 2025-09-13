@@ -10,24 +10,45 @@ use common::io::framebuffer::FramebufferInfo;
 use common::io::framebuffer::VbeDisplay;
 use common::println_bios;
 use common::BiosInfo;
+use common::VbeDisplayInfo;
 
 use crate::utils::get_stack_left;
+use crate::utils::get_stack_used;
+use crate::utils::prompt_continue;
 
 /// Enters the best fit VBE mode
 ///
 /// SAFETY: Writes to static variables, can't be used accross threads
 // #[inline(never)]
-pub fn init_graphical(info: &mut BiosInfo) {
-    init(info);
+pub fn init_graphical() {
+    init();
 }
 
-fn init(info: &mut BiosInfo) {
+fn init() {
     assert_eq!(size_of::<VesaVbeBlockDef>(), 512, "VbeInfoBlock bad size");
     assert_eq!(
         size_of::<VesaVbeModeDef>(),
         256,
         "VesaModeInfoBlock bad size"
     );
+    println_bios!("About to init screen");
+    println_bios!("STACK USED: 0x{:X}", get_stack_used());
+    init_font();
+    init_framebuffer();
+    VbeDisplay::init();
+}
+
+// TODO: Figure out why this causes things to print properly
+fn fill_screen() {
+    for ii in 0..VbeDisplay.width() {
+        for jj in 0..VbeDisplay.height() {
+            VbeDisplay.set_pixel(ii, jj, &Color::BLACK);
+        }
+    }
+}
+
+fn init_framebuffer() {
+    let info = unsafe { VbeDisplayInfo::get_mut() };
     // Get the best mode relative to these target numbers
     let (width, height, depth) = get_preferred_width_height_depth();
 
@@ -44,27 +65,12 @@ fn init(info: &mut BiosInfo) {
             Err(e) => panic!("couldn't load mode {best_mode}: {e}"),
         };
         set_vbe_mode(framebuffer);
-        info.display_info.framebuffer = framebuffer.clone();
-    }
-
-    set_bitmap_font_from_bios();
-    println_bios!("About to init screen");
-    println_bios!("STACK LEFT: 0x{:X}", get_stack_left());
-    VbeDisplay::init();
-    // info.display_info.is_init = true;
-}
-
-// TODO: Figure out why this causes things to print properly
-fn fill_screen() {
-    for ii in 0..VbeDisplay.width() {
-        for jj in 0..VbeDisplay.height() {
-            VbeDisplay.set_pixel(ii, jj, &Color::BLACK);
-        }
+        info.framebuffer = framebuffer.clone();
     }
 }
 
 /// Loads BIOS VGA font into a given address
-fn set_bitmap_font_from_bios() {
+fn init_font() {
     // ES:BP is address of font we want to save
     let mut bp: u16;
     let mut es: u16;

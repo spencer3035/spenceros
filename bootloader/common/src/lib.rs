@@ -1,6 +1,9 @@
 #![cfg_attr(not(test), no_std)]
 
-use crate::{config::BIOS_INFO, io::framebuffer::Font};
+use crate::{
+    config::{BIOS_INFO, VBE_DISPLAY_INFO},
+    io::framebuffer::Font,
+};
 
 /// Config values for memory and sizes of files
 pub mod config;
@@ -81,33 +84,72 @@ pub struct BiosInfo {
     pub memory_map_start: *const u8,
     pub vba_is_init: bool,
     pub memory_map_count: u32,
-    pub display_info: DisplayInfo,
 }
 
 #[repr(C)]
-pub struct DisplayInfo {
+pub struct VbeDisplayInfo {
     pub framebuffer: io::framebuffer::FramebufferInfo,
     pub font: *const Font,
     pub char_index: u32,
+    pub is_init: bool,
 }
 
-impl DisplayInfo {
-    const fn new() -> Self {
+impl VbeDisplayInfo {
+    const fn null() -> Self {
         Self {
             framebuffer: io::framebuffer::FramebufferInfo::null(),
             font: 0 as *const Font,
             char_index: 0,
+            is_init: false,
+        }
+    }
+
+    /// Init the with null information
+    ///
+    /// # Safety
+    ///
+    /// This function should only be called once. It is also not thread safe
+    #[allow(dead_code)]
+    #[inline(never)]
+    pub unsafe fn init() {
+        unsafe {
+            *VBE_DISPLAY_INFO = VbeDisplayInfo::null();
+        }
+    }
+
+    /// Gets mutable reference
+    ///
+    /// # Safety
+    ///
+    /// The following two conditions need to be met:
+    /// - [Self::init()] has been called to initialize the memory
+    /// - Need to manually enforce borrowing rules. Only one mutable reference can exist at a time
+    pub unsafe fn get_mut() -> &'static mut Self {
+        {
+            VBE_DISPLAY_INFO.as_mut().unwrap()
+        }
+    }
+
+    /// Gets reference
+    ///
+    /// # Safety
+    ///
+    /// The following two conditions need to be met:
+    /// - [Self::init()] has been called to initialize the memory
+    /// - Need to manually enforce borrowing rules.
+    pub unsafe fn get() -> &'static Self {
+        {
+            VBE_DISPLAY_INFO.as_ref().unwrap()
         }
     }
 }
 
 impl BiosInfo {
-    const fn new() -> Self {
+    const fn null() -> Self {
         BiosInfo {
             memory_map_start: 0 as *const u8,
             vba_is_init: false,
             memory_map_count: 0,
-            display_info: DisplayInfo::new(),
         }
     }
 
@@ -120,7 +162,7 @@ impl BiosInfo {
     #[inline(never)]
     pub unsafe fn init() {
         unsafe {
-            *BIOS_INFO = BiosInfo::new();
+            *BIOS_INFO = BiosInfo::null();
         }
     }
 

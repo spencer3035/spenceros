@@ -1,12 +1,6 @@
-use core::{
-    fmt::Write,
-    sync::atomic::{AtomicUsize, Ordering},
-};
+use core::fmt::Write;
 
-use crate::{
-    config::{BIOS_INFO, FONT},
-    BiosInfo,
-};
+use crate::{config::FONT, VbeDisplayInfo};
 
 #[macro_export]
 macro_rules! println_vbe {
@@ -268,50 +262,28 @@ impl FramebufferInfo {
     }
 }
 
-// TODO: These need to be stored more carefully, right now they depend on stuff with the stack
-static CHAR_INDEX: AtomicUsize = AtomicUsize::new(0);
-
 pub struct VbeDisplay;
 
+// TODO: This current implementation is terrible in terms of safety. Both get_mut and get can
+// probably overlap. We should figure out a better way to structure things
 impl FrameBuffer for VbeDisplay {
     fn width(&self) -> u16 {
-        unsafe { BIOS_INFO.as_ref().unwrap().display_info.framebuffer.width() }
+        unsafe { VbeDisplayInfo::get().framebuffer.width() }
     }
     fn height(&self) -> u16 {
-        unsafe {
-            BIOS_INFO
-                .as_ref()
-                .unwrap()
-                .display_info
-                .framebuffer
-                .height()
-        }
+        unsafe { VbeDisplayInfo::get().framebuffer.height() }
     }
     fn set_pixel(&self, x: u16, y: u16, c: &Color) -> bool {
-        unsafe {
-            BIOS_INFO
-                .as_ref()
-                .unwrap()
-                .display_info
-                .framebuffer
-                .set_pixel(x, y, c)
-        }
+        unsafe { VbeDisplayInfo::get().framebuffer.set_pixel(x, y, c) }
     }
     fn font(&self) -> Option<&'static Font> {
         unsafe { FONT.as_ref() }
     }
     fn shift_up(&self, rows: u16) {
-        unsafe {
-            BIOS_INFO
-                .as_ref()
-                .unwrap()
-                .display_info
-                .framebuffer
-                .shift_up(rows)
-        }
+        unsafe { VbeDisplayInfo::get().framebuffer.shift_up(rows) }
     }
     fn clear(&self) {
-        unsafe { BIOS_INFO.as_ref().unwrap().display_info.framebuffer.clear() }
+        unsafe { VbeDisplayInfo::get().framebuffer.clear() }
     }
 }
 
@@ -329,13 +301,16 @@ impl VbeDisplay {
     pub fn init() {
         // This seems to "wake up" the screen so later prints work. It may be worth investigating
         // why some prints do not display correctly without this
+        unsafe {
+            VbeDisplayInfo::get_mut().is_init = true;
+        }
         VbeDisplay.clear();
     }
     pub fn is_init() -> bool {
-        unsafe { BiosInfo::get().display_info.framebuffer.is_valid() }
+        unsafe { VbeDisplayInfo::get().is_init }
     }
     pub fn reset(&self) {
-        CHAR_INDEX.store(0, Ordering::Relaxed);
+        unsafe { VbeDisplayInfo::get_mut().char_index = 0 }
         // Set everything to dark gray
         for x in 0..VbeDisplay.width() {
             for y in 0..VbeDisplay.height() {
@@ -350,14 +325,15 @@ impl VbeDisplay {
         VbeDisplay.height() / CHAR_HEIGHT
     }
     fn write_char_impl(&self, c: char) {
-        let mut char_idx = CHAR_INDEX.load(Ordering::Acquire);
-        if char_idx >= self.width_char() as usize * self.height_char() as usize {
-            char_idx = (self.height_char() as usize - 1) * self.width_char() as usize;
+        // TODO: This is super subject to race conditions if used across multiple threads
+        let mut char_idx: u32 = unsafe { VbeDisplayInfo::get().char_index };
+        if char_idx >= self.width_char() as u32 * self.height_char() as u32 {
+            char_idx = (self.height_char() as u32 - 1) * self.width_char() as u32;
             self.shift_up(16);
         }
 
         if c == '\n' {
-            char_idx += self.width_char() as usize - char_idx % self.width_char() as usize;
+            char_idx += self.width_char() as u32 - char_idx % self.width_char() as u32;
         } else {
             let y = char_idx as u16 / self.width_char();
             let x = char_idx as u16 % self.width_char();
@@ -369,6 +345,6 @@ impl VbeDisplay {
             char_idx += 1;
         }
 
-        CHAR_INDEX.store(char_idx, Ordering::Release);
+        unsafe { VbeDisplayInfo::get_mut().char_index = char_idx };
     }
 }

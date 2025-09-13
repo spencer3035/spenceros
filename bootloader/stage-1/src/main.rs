@@ -7,7 +7,6 @@
 
 use core::arch::asm;
 
-use common::config::BIOS_INFO_END;
 use common::static_string::StaticString;
 use common::{gdt::*, println_vbe};
 use common::{print_bios, print_vbe};
@@ -43,7 +42,7 @@ pub extern "C" fn _start(_disk_number: u16) {
 
     println_bios!("About to change graphical modes,");
     prompt_continue();
-    init_graphical(info);
+    init_graphical();
     println_vbe!("Finished graphical");
     println_vbe!("STACK USED: 0x{:X}", get_stack_used());
     // let mut s = StaticString::new();

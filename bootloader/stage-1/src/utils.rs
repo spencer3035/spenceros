@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use common::config::{BIOS_INFO_END, STACK_END};
+use common::config::STACK_END;
 use common::println_bios;
 use common::{gdt::*, println_vbe};
 use common::{print_bios, print_vbe};
