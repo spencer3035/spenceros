@@ -270,7 +270,7 @@ fn get_preferred_width_height_depth() -> (u16, u16, u8) {
             "mov es, cx",
             "int 0x10",
             inout("ax") ax,
-            in("di") addr_of_mut!( EDID_DATA),
+            in("di") addr_of_mut!(EDID_DATA),
         );
     };
 

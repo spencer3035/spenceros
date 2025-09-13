@@ -30,7 +30,6 @@ pub extern "C" fn _start(_disk_number: u16) {
     enable_a20();
 
     unsafe {
-        // Calling this causes a fail?
         // SAFETY: Should only be called once, we call it here
         BiosInfo::init();
     };
