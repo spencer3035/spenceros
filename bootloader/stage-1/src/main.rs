@@ -26,7 +26,6 @@ use utils::*;
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
-    println_bios!("STACK USED: 0x{:X}", get_stack_used());
     enable_a20();
 
     unsafe {
@@ -39,20 +38,7 @@ pub extern "C" fn _start(_disk_number: u16) {
     }
 
     init_graphical();
-    println_vbe!("Finished graphical");
-    println_vbe!("STACK USED: 0x{:X}", get_stack_used());
-    // let mut s = StaticString::new();
-    // loop {
-    //     let c = utils::next_keypress();
-    //
-    //     if c == '\r' {
-    //         println_vbe!("{s}");
-    //         s.clear();
-    //     } else {
-    //         s.push(c);
-    //     }
-    // }
-    println_vbe!("DONE ");
+    println_vbe!("DONE");
     loop {}
     // let count = unsafe { mem::detect_memory() };
     // panic!("Not ready for next stage");

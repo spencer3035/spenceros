@@ -32,7 +32,6 @@ fn init() {
     init_font();
     init_framebuffer();
     VbeDisplay::init();
-    println_vbe!("Done initing screen");
 }
 
 // TODO: Figure out why this causes things to print properly
@@ -61,7 +60,7 @@ fn init_framebuffer() {
             Ok(f) => f,
             Err(e) => panic!("couldn't load mode {best_mode}: {e}"),
         };
-        println_bios!("About to init screen");
+        println_bios!("About to init graphical and clear screen");
         prompt_continue();
         set_vbe_mode(framebuffer);
         info.framebuffer = framebuffer.clone();
