@@ -1,6 +1,7 @@
 use core::arch::asm;
 
 use common::config::STACK_END;
+use common::io::framebuffer::VbeDisplay;
 use common::println_bios;
 use common::{gdt::*, println_vbe};
 use common::{print_bios, print_vbe};
@@ -12,8 +13,6 @@ use common::io::bios::{print_char, print_chars, print_hex, print_hex32};
 #[cfg(target_os = "none")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    use common::io::framebuffer::VbeDisplay;
-
     if VbeDisplay::is_init() {
         println_vbe!("PANIC: {info}");
     } else {
@@ -26,9 +25,17 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
 
 pub fn prompt_continue() {
     loop {
-        print_bios!("Continue (y/n)? ");
+        if VbeDisplay::is_init() {
+            print_vbe!("Continue (y/n)? ");
+        } else {
+            print_bios!("Continue (y/n)? ");
+        }
         let ch = next_keypress();
-        println_bios!("{ch}");
+        if VbeDisplay::is_init() {
+            print_vbe!("{ch}");
+        } else {
+            print_bios!("{ch}");
+        }
         if ch == 'y' {
             break;
         }

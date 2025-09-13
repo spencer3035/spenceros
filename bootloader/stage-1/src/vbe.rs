@@ -9,6 +9,7 @@ use common::io::framebuffer::FrameBuffer;
 use common::io::framebuffer::FramebufferInfo;
 use common::io::framebuffer::VbeDisplay;
 use common::println_bios;
+use common::println_vbe;
 use common::BiosInfo;
 use common::VbeDisplayInfo;
 
@@ -16,10 +17,7 @@ use crate::utils::get_stack_left;
 use crate::utils::get_stack_used;
 use crate::utils::prompt_continue;
 
-/// Enters the best fit VBE mode
-///
-/// SAFETY: Writes to static variables, can't be used accross threads
-// #[inline(never)]
+/// Inits the VBE screen, should only be called once
 pub fn init_graphical() {
     init();
 }
@@ -31,11 +29,10 @@ fn init() {
         256,
         "VesaModeInfoBlock bad size"
     );
-    println_bios!("About to init screen");
-    println_bios!("STACK USED: 0x{:X}", get_stack_used());
     init_font();
     init_framebuffer();
     VbeDisplay::init();
+    println_vbe!("Done initing screen");
 }
 
 // TODO: Figure out why this causes things to print properly
@@ -64,6 +61,8 @@ fn init_framebuffer() {
             Ok(f) => f,
             Err(e) => panic!("couldn't load mode {best_mode}: {e}"),
         };
+        println_bios!("About to init screen");
+        prompt_continue();
         set_vbe_mode(framebuffer);
         info.framebuffer = framebuffer.clone();
     }
@@ -129,8 +128,7 @@ fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Option<u1
         // SAFETY: framebuffer only exists within the scope
         unsafe {
             let framebuffer = match load_framebuffer(*mode_id) {
-                Err(e) => {
-                    println_bios!("{e}");
+                Err(_) => {
                     continue;
                 }
                 Ok(f) => f,
@@ -606,12 +604,6 @@ impl core::fmt::Display for VesaVbeModeDef {
         Ok(())
     }
 }
-
-// TODO: Add something like this to display actual bad value
-//struct VbeCompleteError<'a> {
-//    vbe_block: &'a VbeInfoBlock,
-//    error: VbeError,
-//}
 
 // TODO: Expand on errors
 #[derive(Debug)]

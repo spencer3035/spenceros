@@ -29,19 +29,16 @@ pub extern "C" fn _start(_disk_number: u16) {
     println_bios!("STACK USED: 0x{:X}", get_stack_used());
     enable_a20();
 
-    let info = unsafe {
+    unsafe {
         // Calling this causes a fail?
         // SAFETY: Should only be called once, we call it here
         BiosInfo::init();
-        BiosInfo::get_mut()
     };
 
     if !has_cpuid() {
         panic!("CPUID not present");
     }
 
-    println_bios!("About to change graphical modes,");
-    prompt_continue();
     init_graphical();
     println_vbe!("Finished graphical");
     println_vbe!("STACK USED: 0x{:X}", get_stack_used());
