@@ -7,7 +7,7 @@
 
 use core::arch::asm;
 
-use common::config::MEMORY_MAP_START;
+use common::config::BIOS_INFO_END;
 use common::static_string::StaticString;
 use common::{gdt::*, println_vbe};
 use common::{print_bios, print_vbe};
@@ -27,12 +27,13 @@ use utils::*;
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
+    println_bios!("STACK USED: 0x{:X}", get_stack_used());
     unsafe {
         // For some reason this seems to break when we move it around/mark the function as safe?
         enable_a20();
         // Calling this causes a fail?
         // SAFETY: Should only be called once, we call it here
-        // BiosInfo::init();
+        BiosInfo::init();
     }
 
     if !has_cpuid() {
@@ -44,17 +45,18 @@ pub extern "C" fn _start(_disk_number: u16) {
     init_graphical();
     println_vbe!("Finished graphical");
     println_vbe!("STACK USED: 0x{:X}", get_stack_used());
-    let mut s = StaticString::new();
-    loop {
-        let c = utils::next_keypress();
-
-        if c == '\r' {
-            println_vbe!("{s}");
-            s.clear();
-        } else {
-            s.push(c);
-        }
-    }
+    // let mut s = StaticString::new();
+    // loop {
+    //     let c = utils::next_keypress();
+    //
+    //     if c == '\r' {
+    //         println_vbe!("{s}");
+    //         s.clear();
+    //     } else {
+    //         s.push(c);
+    //     }
+    // }
+    println_vbe!("DONE ");
     loop {}
     // let count = unsafe { mem::detect_memory() };
     // panic!("Not ready for next stage");

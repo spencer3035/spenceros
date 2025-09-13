@@ -275,12 +275,7 @@ pub struct VesaVbeBlockDef {
     oem_data: [u8; 256],
 }
 
-impl core::fmt::Display for VesaVbeBlockDef {
-    fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        todo!();
-        //Ok(())
-    }
-}
+// static VESA_VBE_BLOCK_DEF: VesaVbeBlockDef = VesaVbeBlockDef::null();
 
 impl VesaVbeBlockDef {
     fn get_modes(&self) -> &[u16] {
@@ -296,6 +291,26 @@ impl VesaVbeBlockDef {
         }
 
         unsafe { core::slice::from_raw_parts(mode_ptr, length) }
+    }
+
+    const fn null() -> Self {
+        Self {
+            // b"VESA" or [86, 69, 83, 65] or [0x56, 0x45, 0x53, 0x41]
+            signature: [0; 4],
+            // 0x300 for VBE 3
+            version: 0,
+            // Points to a string
+            oem_string_ptr: 0,
+            capabillities: [0; 4],
+            video_mode_ptr: 0,
+            total_memory: 0,
+            oem_software_rev: 0,
+            oem_vendor_name_ptr: 0,
+            oem_product_name_ptr: 0,
+            oem_product_rev_ptr: 0,
+            reserved: [0; 222],
+            oem_data: [0; 256],
+        }
     }
 
     /// Loads VBE into new structure

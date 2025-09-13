@@ -87,7 +87,7 @@ pub struct BiosInfo {
 #[repr(C)]
 pub struct DisplayInfo {
     pub framebuffer: io::framebuffer::FramebufferInfo,
-    pub font: Font,
+    pub font: *const Font,
     pub char_index: u32,
 }
 
@@ -95,7 +95,7 @@ impl DisplayInfo {
     const fn new() -> Self {
         Self {
             framebuffer: io::framebuffer::FramebufferInfo::null(),
-            font: [0; 0x1000],
+            font: 0 as *const Font,
             char_index: 0,
         }
     }
@@ -117,6 +117,7 @@ impl BiosInfo {
     ///
     /// This function should only be called once. It is also not thread safe
     #[allow(dead_code)]
+    #[inline(never)]
     pub unsafe fn init() {
         unsafe {
             *BIOS_INFO = BiosInfo::new();

@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use common::config::MEMORY_MAP_START;
+use common::config::BIOS_INFO_END;
 use common::println_bios;
 use common::static_string::StaticString;
 use common::{gdt::*, println_vbe};
@@ -12,7 +12,7 @@ use common::io::bios::{print_char, print_chars, print_hex, print_hex32};
 pub unsafe fn detect_memory() -> u16 {
     let int15_ax = 0xE820;
     let magic_number = 0x534d4150;
-    let mem_address: u16 = MEMORY_MAP_START as u16;
+    let mem_address: u16 = BIOS_INFO_END as u16;
 
     // Registers
     let mut eax = int15_ax;

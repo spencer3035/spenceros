@@ -1,6 +1,6 @@
 use core::arch::asm;
 
-use common::config::{MEMORY_MAP_START, STACK_END};
+use common::config::{BIOS_INFO_END, STACK_END};
 use common::println_bios;
 use common::{gdt::*, println_vbe};
 use common::{print_bios, print_vbe};
@@ -36,7 +36,6 @@ pub fn prompt_continue() {
 }
 
 /// Check if A20 is enabled
-#[inline(always)]
 pub unsafe fn enable_a20() {
     // enable A20-Line via IO-Port 92, might not work on all motherboards
     let al: u8;
@@ -95,7 +94,7 @@ pub fn has_cpuid() -> bool {
 pub fn get_stack_used() -> u32 {
     let mut sp: u32;
     unsafe {
-        asm!("mov {:e}, esp",  out(reg) sp);
+        asm!("mov {sp}, esp",  sp = out(reg_abcd) sp);
     }
     STACK_END as u32 - sp
 }
