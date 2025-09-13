@@ -176,27 +176,6 @@ struct PreferredResolution {
     height: u16,
 }
 
-static mut EDID_DATA: EdidData = EdidData {
-    header: [0; 8],
-    manufacturer_id: 0,
-    product_id: 0,
-    serial_id: 0,
-    week: 0,
-    year: 0,
-    version: 0,
-    revision: 0,
-    video_input_def: 0,
-    horizontal_aspect_ratio: 0,
-    vertical_aspect_ratio: 0,
-    gamma: 0,
-    feature_support: 0,
-    chromo_coords: [0; 34 - 25 + 1],
-    established_timing: [0; 37 - 35 + 1],
-    standard_timing: [0; 53 - 38 + 1],
-    display_timing: [0; 125 - 54 + 1],
-    extension_flag: [0; 127 - 126 + 1],
-};
-
 /// Section 3.1 of doc
 #[repr(C, align(0x80))]
 #[derive(Debug)]
@@ -235,6 +214,29 @@ impl EdidData {
             true
         }
     }
+
+    const fn null() -> Self {
+        Self {
+            header: [0; 8],
+            manufacturer_id: 0,
+            product_id: 0,
+            serial_id: 0,
+            week: 0,
+            year: 0,
+            version: 0,
+            revision: 0,
+            video_input_def: 0,
+            horizontal_aspect_ratio: 0,
+            vertical_aspect_ratio: 0,
+            gamma: 0,
+            feature_support: 0,
+            chromo_coords: [0; 34 - 25 + 1],
+            established_timing: [0; 37 - 35 + 1],
+            standard_timing: [0; 53 - 38 + 1],
+            display_timing: [0; 125 - 54 + 1],
+            extension_flag: [0; 127 - 126 + 1],
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -254,14 +256,13 @@ struct EdidDataDisplay {
     feature_support: u8,
 }
 
+static mut EDID_DATA: EdidData = EdidData::null();
 fn get_preferred_width_height_depth() -> (u16, u16, u8) {
     assert_eq!(size_of::<EdidData>(), 0x80);
 
     let mut ax = 0x4f15;
-    let edid_data: EdidData;
     unsafe {
         // SAFETY: Edid data is init by bios call
-        let mut edid_data_uninit = MaybeUninit::uninit();
         asm!(
             "mov bl, 0x01",
             "xor cx, cx",
@@ -269,21 +270,21 @@ fn get_preferred_width_height_depth() -> (u16, u16, u8) {
             "mov es, cx",
             "int 0x10",
             inout("ax") ax,
-            in("di") &mut edid_data_uninit,
+            in("di") addr_of_mut!( EDID_DATA),
         );
-
-        edid_data = edid_data_uninit.assume_init()
     };
 
     if ax != 0x4f {
         panic!("Bad ax : 0x{ax:x}");
     }
 
-    if !edid_data.is_valid() {
-        panic!("Bad edid data");
+    unsafe {
+        if !EDID_DATA.is_valid() {
+            panic!("Bad edid data");
+        }
     }
 
-    let (def, info) = (edid_data.video_input_def, &edid_data.display_timing);
+    let (def, info) = unsafe { (EDID_DATA.video_input_def, &EDID_DATA.display_timing) };
     let depth = if def & 0b10000000 != 0 {
         let bits_per_color = match (def & 0b01110000) >> 4 {
             0b001 => 6,
@@ -404,34 +405,35 @@ impl VesaVbeBlockDef {
     }
 }
 
+static mut VBE_MODE_DEF: VesaVbeModeDef = VesaVbeModeDef::null();
+
 /// Reads a VBE mode to frame buffer
 ///
 /// # SAFETY: This uses a static variable to return references, so there should only be one
 /// refernce to the return value at a time (don't call this function twice in the same scope or
 /// deeper).
 unsafe fn load_framebuffer(mode_id: u16) -> Result<&'static FramebufferInfo, VbeError> {
-    let vbe_mode_def: VesaVbeModeDef;
     let mut ax = 0x4f01;
 
     unsafe {
         // SAFETY: vbe is populated with bios call below and checked for validity immediately after
-        let mut vbe_mode_def_uninit: MaybeUninit<VesaVbeModeDef> = MaybeUninit::uninit();
         asm!(
             "int 0x10",
             inout("ax") ax,
             in("cx") mode_id,
-            in("di") &mut vbe_mode_def_uninit
+            in("di") addr_of_mut!(VBE_MODE_DEF)
         );
-        vbe_mode_def = vbe_mode_def_uninit.assume_init();
+        VBE_MODE_DEF.check()?;
     }
+
     check_vbe_ax!(ax, "VBE mode fail");
-    vbe_mode_def.check()?;
 
     // Check it is a mode we want
     // Packed pixel or direct color
-    let memory_model_works = vbe_mode_def.memory_model == 4 || vbe_mode_def.memory_model == 6;
+    let memory_model_works =
+        unsafe { VBE_MODE_DEF.memory_model == 4 || VBE_MODE_DEF.memory_model == 6 };
     let required_flags = SUPPORTED_BY_HARDWARE | LINEAR_FRAME_BUFFER | NO_VGA_COMPAT | GRAPICS_MODE;
-    let has_flags = vbe_mode_def.mode_attributes & required_flags == required_flags;
+    let has_flags = unsafe { VBE_MODE_DEF.mode_attributes & required_flags == required_flags };
     let good_mode = memory_model_works && has_flags;
     if !good_mode {
         return Err(VbeError::ModeNotGood);
@@ -440,11 +442,11 @@ unsafe fn load_framebuffer(mode_id: u16) -> Result<&'static FramebufferInfo, Vbe
     unsafe {
         FRAME_BUFFER_INFO = FramebufferInfo {
             mode_id,
-            bits_per_pixel: vbe_mode_def.bits_per_pixel,
-            bytes_per_scan_line: vbe_mode_def.bytes_per_scan_line,
-            width: vbe_mode_def.width,
-            height: vbe_mode_def.height,
-            framebuffer: vbe_mode_def.framebuffer as *mut u8,
+            bits_per_pixel: VBE_MODE_DEF.bits_per_pixel,
+            bytes_per_scan_line: VBE_MODE_DEF.bytes_per_scan_line,
+            width: VBE_MODE_DEF.width,
+            height: VBE_MODE_DEF.height,
+            framebuffer: VBE_MODE_DEF.framebuffer as *mut u8,
         };
     }
 
