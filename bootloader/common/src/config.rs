@@ -34,9 +34,9 @@ macro_rules! layout {
 
         /// Total number of entries
         #[cfg(test)]
-        // Kind of cheeky way to get `count = 0 + 1 + 1 + 1 ...;`. Will break if addr is 0 or not a
+        // Kind of cheeky way to get `count = 0 + 1 + 1 + 1 ...;`. Will break if addr is not a
         // numeric literal
-        const TOTAL_MEM_ENTRIES : usize = 0 $( + $addr / $addr)*;
+        const TOTAL_MEM_ENTRIES : usize = 0 $(+ ($addr + 1) / ($addr + 1))*;
 
         /// Structure with all start/ends for testing
         #[cfg(test)]
@@ -51,10 +51,13 @@ macro_rules! layout {
     };
 }
 
-// - 0x0000 to 0x1000 is a no-go zone. It contains inturrupt vector information
 // - Pointers should not overlap and be documented how large the structures are
 
 layout!(
+    /// Reserved, do not use
+    0x0000 => _REAL_MODE_IVT : [u8; 0x400],
+    /// Reserved, do not use
+    0x0400 => _BIOS_DATA_AREA : [u8; 0x100],
     /// VBE Display info, used to print stuff to screen in VBE mode
     0x3000 => VBE_DISPLAY_INFO:  VbeDisplayInfo,
     /// Font for printing in VBE mode
@@ -75,13 +78,23 @@ layout!(
     /// Start of stage 3 in memory
     0xfe00 => STAGE_3_START: [u8; STAGE_3_SECTIONS * 0x200],
     /// Start of the PML4T, takes up 0x1000 = 8 * 0x200 bytes
-    0x20000 => PML4T_START: [u64; 0x200],
+    0x0002_0000 => PML4T_START: [u64; 0x200],
     /// Start of the PDPT,  takes up 0x1000 = 8 * 0x200 bytes
-    0x21000 => PDPT_START: [u64; 0x200],
+    0x0002_1000 => PDPT_START: [u64; 0x200],
     /// Start of the PDT,   takes up 0x1000 = 8 * 0x200 bytes
-    0x22000 => PDT_START: [u64; 0x200],
+    0x0002_2000 => PDT_START: [u64; 0x200],
     /// Start of the PT,    takes up 0x1000 = 8 * 0x200 bytes
-    0x23000 => PT_START: [u64; 0x200],
+    0x0002_3000 => PT_START: [u64; 0x200],
+    /// Reserved, do not use
+    0x0008_0000 => _BIOS_DATA_AREA_EXTENDED : [u8; 0x2_0000],
+    /// Reserved, do not use
+    0x000A_0000 => _VIDEO_DISPLAY_MEM : [u8; 0x2_0000],
+    /// Reserved, do not use
+    0x000C_0000 => _VIDEO_BIOS : [u8; 0x8000],
+    /// Reserved, do not use
+    0x000C_8000 => _BIOS_EXPANSIONS : [u8; 0x2_8000],
+    /// Reserved, do not use
+    0x000F_0000 => _MOTHERBOARD_BIOS : [u8; 0x2_000],
 );
 
 pub const STACK_END: usize = 0x7c00;
@@ -119,7 +132,11 @@ mod test {
     #[cfg(test)]
     impl core::fmt::Display for MapEntry {
         fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            write!(f, "{}: [0x{:X}, 0x{:X}]", self.name, self.low, self.high)
+            write!(
+                f,
+                "{:25}: [0x{:0>6X}, 0x{:0>6X}]",
+                self.name, self.low, self.high
+            )
         }
     }
 

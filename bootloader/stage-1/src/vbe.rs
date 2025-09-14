@@ -3,14 +3,10 @@ use core::ptr::addr_of;
 use core::ptr::addr_of_mut;
 
 use common::config::FONT;
-use common::io::framebuffer::Color;
-use common::io::framebuffer::FrameBuffer;
 use common::io::framebuffer::FramebufferInfo;
 use common::io::framebuffer::VbeDisplay;
 use common::println_bios;
 use common::VbeDisplayInfo;
-
-use crate::utils::prompt_continue;
 
 /// Inits the VBE screen, should only be called once
 pub fn init_graphical() {
@@ -27,15 +23,6 @@ fn init() {
     init_font();
     init_framebuffer();
     VbeDisplay::init();
-}
-
-// TODO: Figure out why this causes things to print properly
-fn fill_screen() {
-    for ii in 0..VbeDisplay.width() {
-        for jj in 0..VbeDisplay.height() {
-            VbeDisplay.set_pixel(ii, jj, &Color::BLACK);
-        }
-    }
 }
 
 fn init_framebuffer() {
@@ -56,7 +43,7 @@ fn init_framebuffer() {
             Err(e) => panic!("couldn't load mode {best_mode}: {e}"),
         };
         println_bios!("About to init graphical and clear screen");
-        prompt_continue();
+        // prompt_continue();
         set_vbe_mode(framebuffer);
         info.framebuffer = framebuffer.clone();
     }
@@ -163,13 +150,6 @@ fn set_vbe_mode(best_mode: &FramebufferInfo) {
     }
 }
 
-#[derive(Debug)]
-struct PreferredResolution {
-    depth: u8,
-    width: u16,
-    height: u16,
-}
-
 /// Section 3.1 of doc
 #[repr(C, align(0x80))]
 #[derive(Debug)]
@@ -233,6 +213,7 @@ impl EdidData {
     }
 }
 
+#[allow(unused)]
 #[derive(Debug)]
 struct EdidDataDisplay {
     header: [u8; 8],

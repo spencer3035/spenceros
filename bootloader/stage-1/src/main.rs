@@ -6,8 +6,8 @@
 use core::arch::asm;
 
 use common::config::STAGE_2_START;
-use common::BiosInfo;
 use common::{gdt::*, println_vbe};
+use common::{println_bios, BiosInfo};
 
 use vbe::init_graphical;
 
@@ -22,6 +22,7 @@ use utils::*;
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
+    println_bios!("Starting stage 1");
     enable_a20();
 
     unsafe {
@@ -34,9 +35,10 @@ pub extern "C" fn _start(_disk_number: u16) {
     }
 
     init_graphical();
+    println_vbe!("Detecting memory");
+    unsafe { mem::detect_memory() };
     println_vbe!("DONE");
     loop {}
-    // let count = unsafe { mem::detect_memory() };
     // panic!("Not ready for next stage");
     // loop {}
     // unsafe {
