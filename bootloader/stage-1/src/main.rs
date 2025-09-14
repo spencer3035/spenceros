@@ -5,6 +5,7 @@
 
 use core::arch::asm;
 
+use common::config::STAGE_2_START;
 use common::BiosInfo;
 use common::{gdt::*, println_vbe};
 
@@ -47,7 +48,6 @@ pub extern "C" fn _start(_disk_number: u16) {
 unsafe fn next_stage(count: u16) {
     // Perform long jump
     unsafe {
-        let entry_point = 0x7c00 + 0x600;
         asm!(
             // align the stack
             "and esp, 0xffffff00",
@@ -56,7 +56,7 @@ unsafe fn next_stage(count: u16) {
             // push entry point address
             "push {entry_point:e}",
             info = in(reg) count as u32,
-            entry_point = in(reg) entry_point as u32,
+            entry_point = in(reg) STAGE_2_START as u32,
         );
         // Perform a "long jump" to one line down.
         asm!(

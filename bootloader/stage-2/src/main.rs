@@ -89,8 +89,7 @@ pub extern "C" fn _start(_count: u16) -> ! {
 
     // TODO: Load gdt and enter perform long jump to enter long mode
     unsafe {
-        let entry_point =
-            STAGE_0_START + (STAGE_0_SECTIONS + STAGE_1_SECTIONS + STAGE_2_SECTIONS) * 512;
+        let entry_point = STAGE_3_START;
 
         //println!("In protected mode, about to enter long mode");
         //clear_screen();

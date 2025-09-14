@@ -5,7 +5,7 @@ use common::io::framebuffer::VbeDisplay;
 use common::println_bios;
 use common::{print_bios, print_vbe};
 
-use common::config::STACK_START;
+use common::config::STACK;
 
 // TODO: Make sure correct println is used
 #[cfg(target_os = "none")]
@@ -112,7 +112,7 @@ pub fn get_stack_used() -> u32 {
 #[inline(always)]
 pub fn get_stack_left() -> u32 {
     let used = get_stack_used();
-    let total = STACK_END as u32 - STACK_START as u32;
+    let total = STACK_END as u32 - STACK as u32;
     total - used
 }
 

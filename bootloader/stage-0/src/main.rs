@@ -8,8 +8,8 @@ use core::arch::global_asm;
 
 pub mod fail;
 
+use common::config::STACK;
 use common::config::STACK_END;
-use common::config::STACK_START;
 use fail::fail;
 
 extern "C" {
@@ -31,8 +31,8 @@ pub extern "C" fn main(drive_number: u16) {
         );
     }
 
-    if bp != STACK_END as u16 || sp < STACK_START as u16 || sp > STACK_END as u16 {
-        fail(b"Stack out of range");
+    if bp != STACK_END as u16 || sp < STACK as u16 || sp > STACK_END as u16 {
+        fail(b"stack out of range, check bp in boot.s");
     }
 
     check_int13();

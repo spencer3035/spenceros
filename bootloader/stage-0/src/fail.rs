@@ -7,7 +7,7 @@ fn panic(_info: &PanicInfo) -> ! {
     fail(b"panic");
 }
 
-/// Prints 'Fail: [char]' and halts
+/// Prints 'Fail: &[char]' and halts
 pub(crate) fn fail(code: &[u8]) -> ! {
     print_chars(b"Fail: ");
     println_chars(code);
