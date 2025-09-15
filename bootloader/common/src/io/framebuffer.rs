@@ -1,6 +1,6 @@
 use core::fmt::Write;
 
-use crate::{config::FONT, VbeDisplayInfo};
+use crate::{config::FONT, vbe_display::VbeDisplayInfo};
 
 #[macro_export]
 macro_rules! println_vbe {

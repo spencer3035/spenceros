@@ -6,8 +6,8 @@
 use core::arch::asm;
 
 use common::config::STAGE_2_START;
+use common::{bios_info::BiosInfo, println_bios};
 use common::{gdt::*, println_vbe};
-use common::{println_bios, BiosInfo};
 
 use vbe::init_graphical;
 

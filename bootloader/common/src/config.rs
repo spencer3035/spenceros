@@ -1,5 +1,5 @@
-use super::BiosInfo;
-use crate::VbeDisplayInfo;
+use crate::bios_info::BiosInfo;
+use crate::vbe_display::VbeDisplayInfo;
 
 /// Helper to define the memory layout.
 ///
@@ -66,7 +66,7 @@ layout!(
     0x5000 => BIOS_INFO: BiosInfo ,
     /// Lowest address of the stack.
     ///
-    /// The stack grows down so BP should be set to STACK_END (the last address)
+    /// The stack grows down so BP should be set to STACK_END (the last address) on boot
     0x6000 => STACK: [u8; STACK_END - 0x6000],
     /// Start of stage 0 in memory
     0x7c00 => STAGE_0_START: [u8; STAGE_0_SECTIONS * 0x200],
