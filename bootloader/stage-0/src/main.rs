@@ -10,16 +10,22 @@ pub mod fail;
 
 use common::config::STACK;
 use common::config::STACK_END;
+use common::config::STAGE_1_START;
 use fail::fail;
 
-extern "C" {
-    /// The address of this number is set in the link.ld file to be the first byte of the next
-    /// section. We can use the address of this to transmute it to a function pointer and call it.
-    static _second_stage_start: u8;
-}
-
+// TODO: This currently uses up 0x36 values on the stack and they will never get cleaned up
+// because the next stage will never return. It seems like a bad idea to mess with `sp` and
+// `bp` here though. It might not actually be a problem long term?
 #[no_mangle]
 pub extern "C" fn main(drive_number: u16) {
+    let next_stage = main_inner(drive_number);
+    next_stage(drive_number);
+    fail(b"stage 1")
+}
+
+// We force this to not inline so that rust can clean up the stack for us as much as possible
+#[inline(never)]
+fn main_inner(drive_number: u16) -> extern "C" fn(u16) {
     let bp: u16;
     let sp: u16;
     unsafe {
@@ -35,19 +41,18 @@ pub extern "C" fn main(drive_number: u16) {
         fail(b"stack out of range, check bp in boot.s");
     }
 
-    check_int13();
+    check_int13(drive_number);
     load_sectors(drive_number);
 
     // Transmute the pointer to the beginning of the next stage to a function and call it.
     let next_stage: extern "C" fn(disk_number: u16) =
-        unsafe { core::mem::transmute(&_second_stage_start as *const u8 as *const ()) };
-    next_stage(drive_number);
-    fail(b"stage 1")
+        unsafe { core::mem::transmute(STAGE_1_START as *const ()) };
+    next_stage
 }
 
-/// Check that inturrupt 13 is avaliable
+/// Check that interrupt 13 is available
 #[inline(always)]
-fn check_int13() {
+fn check_int13(drive_num: u16) {
     let ax: u16;
     unsafe {
         asm!(
@@ -60,7 +65,8 @@ fn check_int13() {
           "jnc 2f",
           "mov ax, 12",
           "2:",
-           out("ax") ax
+           out("ax") ax,
+           in("dx") drive_num,
         );
 
         if ax != 0 {

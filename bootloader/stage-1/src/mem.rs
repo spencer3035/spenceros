@@ -1,17 +1,19 @@
 use core::{arch::asm, ptr::addr_of};
 
-use common::println_vbe;
+use common::{println_vbe, static_items::mem::MemInfo};
+
+use crate::utils::prompt_continue;
 
 #[repr(C, packed)]
 #[derive(Debug)]
-struct MemEntry {
+struct Int15MemEntry {
     base_address: u64,
     length: u64,
     mem_type: u32,
     bitfield: u32,
 }
 
-impl MemEntry {
+impl Int15MemEntry {
     const fn null() -> Self {
         Self {
             base_address: 0,
@@ -22,7 +24,7 @@ impl MemEntry {
     }
 }
 
-impl core::fmt::Display for MemEntry {
+impl core::fmt::Display for Int15MemEntry {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let base_addr = self.base_address;
         let len = self.length;
@@ -30,20 +32,16 @@ impl core::fmt::Display for MemEntry {
     }
 }
 
-static mut MEM_ENTRY: MemEntry = MemEntry::null();
+static mut MEM_ENTRY: Int15MemEntry = Int15MemEntry::null();
 
-/// Detects memory using int 0x15 with eax = 0xE820, returns number of entries read
-pub fn detect_memory() -> u16 {
+/// Detects memory using int 0x15 with eax = 0xE820, and populates information to send to bios
+pub fn detect_memory(memory_info: &mut MemInfo) {
+    // Reference: https://wiki.osdev.org/Detecting_Memory_(x86)
     let int15_ax: u32 = 0xE820;
     // "SMAP"
     let magic_number: u32 = 0x534d4150;
+    // Address we will put the information from the interrupt.
     let mem_address = addr_of!(MEM_ENTRY) as usize;
-
-    if mem_address > u16::MAX as usize {
-        panic!("address for target is out of range [0, 0xFFFF]: 0x{mem_address:X}");
-    } else {
-        println_vbe!("address for target is 0x{mem_address:X}");
-    }
 
     // Registers
     let mut return_code;
@@ -53,12 +51,13 @@ pub fn detect_memory() -> u16 {
     let mut buffer_bytes;
 
     let mut count = 0;
+    let mut free_entries = 0;
     loop {
         return_code = int15_ax;
         // Address to save to before, address saved to after
         addr = mem_address as u16;
         // Size of our buffer in, number of bytes stored out
-        buffer_bytes = size_of::<MemEntry>();
+        buffer_bytes = size_of::<Int15MemEntry>();
 
         #[allow(unused_assignments)]
         unsafe {
@@ -100,17 +99,24 @@ pub fn detect_memory() -> u16 {
             println_vbe!("Bad number of bytes read");
         }
 
-        let mem_type = unsafe { MEM_ENTRY.mem_type };
+        if free_entries >= MemInfo::NUM_ENTRIES {
+            println_vbe!(
+                "Got too many memory entries! We can only support {}",
+                MemInfo::NUM_ENTRIES
+            );
+            prompt_continue();
+            break;
+        }
+
+        let (mem_type, length, address) =
+            unsafe { (MEM_ENTRY.mem_type, MEM_ENTRY.length, MEM_ENTRY.base_address) };
         if mem_type == 1 {
             // Valid memory we can use
-            println_vbe!("{count} FREE: {}", unsafe {
-                addr_of!(MEM_ENTRY).as_ref().unwrap()
-            });
+            memory_info.table[free_entries].physical_address = address;
+            memory_info.table[free_entries].length = length;
+            free_entries += 1;
         } else {
-            // Invalid memory
-            println_vbe!("{count} RESV: {}", unsafe {
-                addr_of!(MEM_ENTRY).as_ref().unwrap()
-            });
+            // Invalid or reserved memory
         }
 
         count += 1;
@@ -120,10 +126,7 @@ pub fn detect_memory() -> u16 {
             break;
         }
     }
-
-    // Reference: https://wiki.osdev.org/Detecting_Memory_(x86)
-    // TODO: Increment di, reset eax and ecx, until ebx==0 or carry is set
-    count
+    memory_info.num_entries = free_entries as u8;
 }
 
 #[cfg(test)]
@@ -132,6 +135,6 @@ mod test {
 
     #[test]
     fn test_mem_entry_size() {
-        assert_eq!(size_of::<MemEntry>(), 24);
+        assert_eq!(size_of::<Int15MemEntry>(), 24);
     }
 }

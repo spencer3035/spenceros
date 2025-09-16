@@ -41,9 +41,10 @@ fn init_static_values() {
     }
 }
 
-#[link_section = ".start"]
-#[no_mangle]
-pub extern "C" fn _start(_disk_number: u16) {
+/// Main function, we force inline so that rust will clean up the stack
+#[inline(never)]
+fn main(_disk_number: u16) {
+    println_bios!("Stack used : 0x{:X}", get_stack_used());
     println_bios!("Starting stage 1");
     enable_a20();
     init_static_values();
@@ -52,10 +53,21 @@ pub extern "C" fn _start(_disk_number: u16) {
         panic!("CPUID not present");
     }
 
+    prompt_continue();
     init_graphical();
+
     println_vbe!("Detecting memory");
-    detect_memory();
+    // Safety: This is the only mutable reference.
+    let memory_info = unsafe { MemInfo::get_mut() };
+    detect_memory(memory_info);
     println_vbe!("DONE");
+}
+
+#[link_section = ".start"]
+#[no_mangle]
+pub extern "C" fn _start(_disk_number: u16) {
+    println_bios!("Stack used : 0x{:X}", get_stack_used());
+    main(_disk_number);
     loop {}
     // panic!("Not ready for next stage");
     // loop {}

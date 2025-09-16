@@ -2,8 +2,8 @@ use crate::{config::MEM_INFO, static_items::static_variable::StaticVariable};
 
 #[repr(C)]
 pub struct MemInfo {
-    num_entries: u8,
-    table: [MemEntry; Self::NUM_ENTRIES],
+    pub num_entries: u8,
+    pub table: [MemEntry; Self::NUM_ENTRIES],
 }
 
 impl MemInfo {
@@ -38,9 +38,9 @@ impl StaticVariable for MemInfo {
 #[repr(C)]
 pub struct MemEntry {
     /// The physical address of the memory
-    physical_address: u64,
+    pub physical_address: u64,
     /// The size (in bytes) the memory is avaliable at
-    length: u64,
+    pub length: u64,
 }
 
 impl MemEntry {

@@ -26,7 +26,6 @@ fn init() {
 }
 
 fn init_framebuffer() {
-    let info = unsafe { VbeDisplayInfo::get_mut() };
     // Get the best mode relative to these target numbers
     let (width, height, depth) = get_preferred_width_height_depth();
 
@@ -45,7 +44,12 @@ fn init_framebuffer() {
         println_bios!("About to init graphical and clear screen");
         // prompt_continue();
         set_vbe_mode(framebuffer);
-        info.framebuffer = framebuffer.clone();
+        {
+            // This needs to have as short a lifetime as possible. VbeDisplayInfo is used mutably
+            // and immutably by the printing logic, so it is not safe to keep it around any longer
+            // than necessary.
+            VbeDisplayInfo::get_mut().framebuffer = framebuffer.clone();
+        }
     }
 }
 

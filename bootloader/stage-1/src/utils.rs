@@ -2,8 +2,8 @@ use core::arch::asm;
 
 use common::config::STACK_END;
 use common::io::framebuffer::VbeDisplay;
-use common::println_bios;
 use common::{print_bios, print_vbe};
+use common::{println_bios, println_vbe};
 
 use common::config::STACK;
 
@@ -35,9 +35,9 @@ pub fn prompt_continue() {
         }
         let ch = next_keypress();
         if VbeDisplay::is_init() {
-            print_vbe!("{ch}");
+            println_vbe!("{ch}\n");
         } else {
-            print_bios!("{ch}");
+            println_bios!("{ch}\n");
         }
         if ch == 'y' {
             break;
