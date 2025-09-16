@@ -1,7 +1,10 @@
-use crate::static_items::{
-    bios_info::BiosInfo,
-    mem::MemInfo,
-    vbe_display::{Font, VbeDisplayInfo},
+use crate::{
+    gdt::Gdt,
+    static_items::{
+        bios_info::BiosInfo,
+        mem::MemInfo,
+        vbe_display::{Font, VbeDisplayInfo},
+    },
 };
 
 /// Helper to define the memory layout.
@@ -69,6 +72,8 @@ layout!(
     0x5000 => BIOS_INFO: BiosInfo,
     /// Information about system's memory
     0x5010 => MEM_INFO : MemInfo,
+    /// Global Descriptor Table (defines memory map)
+    0x5418 => GDT_TABLE : Gdt,
     /// Lowest address of the stack.
     ///
     /// The stack grows down so BP should be set to STACK_END (the last address) on boot
@@ -77,10 +82,10 @@ layout!(
     0x7c00 => STAGE_0_START: [u8; STAGE_0_SECTIONS * 0x200],
     /// Start of stage 1 in memory
     0x7e00 => STAGE_1_START: [u8; STAGE_1_SECTIONS * 0x200],
-    // NOTE: The 16 bit address limit is currently somewhere in the bootloader
     /// Start of stage 2 in memory
     0xde00 => STAGE_2_START: [u8; STAGE_2_SECTIONS * 0x200],
     /// Start of stage 3 in memory
+    // NOTE: The 16 bit address limit is currently here
     0xfe00 => STAGE_3_START: [u8; STAGE_3_SECTIONS * 0x200],
     /// Start of the PML4T, takes up 0x1000 = 8 * 0x200 bytes
     0x0002_0000 => PML4T_START: [u64; 0x200],

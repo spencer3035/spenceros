@@ -5,6 +5,7 @@ use common::config::*;
 use common::gdt::*;
 use core::arch::asm;
 
+#[allow(unused)]
 static GDT_LONG: Gdt = Gdt::long_mode();
 
 macro_rules! println {
@@ -94,7 +95,7 @@ pub extern "C" fn _start() -> ! {
         //println!("In protected mode, about to enter long mode");
         //clear_screen();
 
-        GDT_LONG.load();
+        // GDT_LONG.load();
         asm!(
             // Push value
             "push 0",

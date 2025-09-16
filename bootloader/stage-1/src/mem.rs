@@ -50,7 +50,6 @@ pub fn detect_memory(memory_info: &mut MemInfo) {
     // Size of buffer, should be 24
     let mut buffer_bytes;
 
-    let mut count = 0;
     let mut free_entries = 0;
     loop {
         return_code = int15_ax;
@@ -118,8 +117,6 @@ pub fn detect_memory(memory_info: &mut MemInfo) {
         } else {
             // Invalid or reserved memory
         }
-
-        count += 1;
 
         // TODO: Also check carry is clear
         if map_index == 0 {

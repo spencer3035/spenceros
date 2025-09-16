@@ -1,4 +1,4 @@
-use core::{arch::asm, mem::size_of};
+use crate::{config::GDT_TABLE, static_items::static_variable::StaticVariable};
 
 #[derive(Debug)]
 #[repr(transparent)]
@@ -137,50 +137,63 @@ pub struct AccessFlags(u8);
 /// What the gdt looks like in memory.
 ///
 /// Uses 6 bytes when in 32 bit protected mode and 10 bytes when in 64 bit long mode
-#[derive(Debug)]
 // Gets written directly to memory
 #[allow(dead_code)]
+#[repr(C, packed)]
 pub struct Gdt {
     null: GdtEntry,
     code: GdtEntry,
     data: GdtEntry,
 }
 
-#[derive(Debug)]
-#[repr(C, packed(2))]
-pub struct GdtPointer {
-    pub limit: u16,
-    pub base: *const Gdt,
-    // We conditionally pad the struct so that it will always be a valid width for 64 bit mode
-    #[cfg(target_pointer_width = "32")]
-    _pad: [u8; 4],
+impl Gdt {
+    pub const NUM_ENTRIES: u16 = 3;
 }
 
-#[test]
-fn test_size() {
-    if cfg!(target_pointer_width = "32") {
-        assert_eq!(core::mem::size_of::<GdtPointer>(), 6 + 4)
-    } else if cfg!(target_pointer_width = "64") {
-        assert_eq!(core::mem::size_of::<GdtPointer>(), 10)
-    } else {
-        panic!("No valid target pointer width!");
+impl Default for Gdt {
+    fn default() -> Self {
+        Self {
+            null: GdtEntry::null(),
+            code: GdtEntry::null(),
+            data: GdtEntry::null(),
+        }
+    }
+}
+
+impl StaticVariable for Gdt {
+    fn addr() -> *mut Self {
+        GDT_TABLE
+    }
+}
+
+#[derive(Debug)]
+#[repr(C, packed)]
+pub struct GdtPointer {
+    pub num_entries: u16,
+    pub base_address: *const Gdt,
+    // TODO: Is this needed? It seems like no
+    // We conditionally pad the struct so that it will always be a valid width for 64 bit mode
+    // #[cfg(target_pointer_width = "32")]
+    // _pad: [u8; 4],
+}
+
+impl GdtPointer {
+    pub fn new(base_address: *const Gdt, num_entries: u16) -> Self {
+        Self {
+            num_entries,
+            base_address,
+        }
+    }
+
+    pub const fn null() -> Self {
+        Self {
+            num_entries: 0,
+            base_address: core::ptr::null(),
+        }
     }
 }
 
 impl Gdt {
-    pub fn load(&'static self) {
-        let pointer = GdtPointer {
-            limit: size_of::<Gdt>() as u16,
-            base: self,
-            #[cfg(target_pointer_width = "32")]
-            _pad: [0; 4],
-        };
-
-        unsafe {
-            asm!("lgdt [{}]", in(reg) &pointer, options(readonly, nostack, preserves_flags));
-        }
-    }
-
     pub const fn protected_mode() -> Gdt {
         Gdt {
             null: GdtEntry::null(),

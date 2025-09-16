@@ -7,20 +7,19 @@ use core::arch::asm;
 
 use common::config::STAGE_2_START;
 use common::println_bios;
+use common::println_vbe;
 use common::static_items::{
     bios_info::BiosInfo,
     mem::MemInfo,
     static_variable::StaticVariable,
     vbe_display::{Font, VbeDisplayInfo},
 };
-use common::{gdt::*, println_vbe};
 
 use vbe::init_graphical;
 
+pub mod gdt;
 pub mod mem;
 pub mod vbe;
-
-static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
 #[allow(unused)]
 mod utils;
@@ -29,8 +28,6 @@ use utils::*;
 use crate::mem::detect_memory;
 
 /// Initalize all the variables we want to populate
-// We force inline to save space on the stack as this could take up lots of space
-#[inline(never)]
 fn init_static_values() {
     // SAFETY: These should only be called once, we call them here
     unsafe {
@@ -60,7 +57,12 @@ fn main(_disk_number: u16) {
     // Safety: This is the only mutable reference.
     let memory_info = unsafe { MemInfo::get_mut() };
     detect_memory(memory_info);
+    println_vbe!("Loading GDT");
+    unsafe {
+        gdt::load_gdt();
+    }
     println_vbe!("DONE");
+    loop {}
 }
 
 #[link_section = ".start"]
@@ -68,12 +70,10 @@ fn main(_disk_number: u16) {
 pub extern "C" fn _start(_disk_number: u16) {
     println_bios!("Stack used : 0x{:X}", get_stack_used());
     main(_disk_number);
+    println_vbe!("About to enter next stage");
+    prompt_continue();
     unsafe {
-        println_vbe!("Loading GDT");
-        load_gdt();
-        loop {}
-        println_vbe!("DONE");
-        // next_stage();
+        next_stage();
     }
 }
 
@@ -115,21 +115,6 @@ unsafe fn next_stage() {
             "jmp 2b",
             out(reg) _,
             out(reg) _,
-        );
-    }
-}
-
-/// Disables interrupts and loads GDT
-unsafe fn load_gdt() {
-    // Setup protected mode
-    GDT_PROTECTED.load();
-    println_vbe!("Loaded GDT");
-    unsafe {
-        asm!(
-            "cli",          // Disable inturrupts
-            "mov eax, cr0", // Set protection enable bit
-            "or eax, 1",
-            "mov cr0, eax",
         );
     }
 }
