@@ -17,7 +17,7 @@ use fail::fail;
 // because the next stage will never return. It seems like a bad idea to mess with `sp` and
 // `bp` here though. It might not actually be a problem long term?
 #[no_mangle]
-pub extern "C" fn main(drive_number: u16) {
+pub extern "C" fn _rust_entry(drive_number: u16) {
     let next_stage = main_inner(drive_number);
     next_stage(drive_number);
     fail(b"stage 1")

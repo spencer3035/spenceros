@@ -28,7 +28,7 @@ _start:
 rust:
   # push disk number as argument
   push dx
-  call main
+  call _rust_entry
 
 spin:
   hlt
