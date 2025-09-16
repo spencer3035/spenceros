@@ -40,7 +40,7 @@ struct MemoryMapEntry {
 
 #[link_section = ".start"]
 #[no_mangle]
-pub extern "C" fn _start(_count: u16) -> ! {
+pub extern "C" fn _start() -> ! {
     println!("Started protected mode");
 
     //let mut mmap_reader: *const MemoryMapEntry = MEMORY_MAP_START as *const MemoryMapEntry;

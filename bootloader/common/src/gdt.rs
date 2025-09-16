@@ -88,6 +88,9 @@ const DIRECTION_CONFORMING: u8 = 1 << 2;
 /// If data segment, data can be written
 #[allow(dead_code)]
 const READ_WRITE: u8 = 1 << 1;
+// If the segment has been accessed by the CPU.
+#[allow(dead_code)]
+const ACCESSED: u8 = 1 << 1;
 
 // Extra flags:
 
@@ -108,12 +111,12 @@ pub const fn kernel_extra_flags() -> AccessFlags {
 
 #[inline]
 pub const fn kernel_code_flags() -> AccessFlags {
-    AccessFlags(PRESENT | PRIV_0 | CODE_DATA_DESCRIPTOR | EXECUTABLE | READ_WRITE)
+    AccessFlags(PRESENT | PRIV_0 | CODE_DATA_DESCRIPTOR | EXECUTABLE | READ_WRITE | ACCESSED)
 }
 
 #[inline]
 pub const fn kernel_data_flags() -> AccessFlags {
-    AccessFlags(PRESENT | PRIV_0 | CODE_DATA_DESCRIPTOR | READ_WRITE)
+    AccessFlags(PRESENT | PRIV_0 | CODE_DATA_DESCRIPTOR | READ_WRITE | ACCESSED)
 }
 
 #[inline]

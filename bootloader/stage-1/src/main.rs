@@ -68,26 +68,24 @@ fn main(_disk_number: u16) {
 pub extern "C" fn _start(_disk_number: u16) {
     println_bios!("Stack used : 0x{:X}", get_stack_used());
     main(_disk_number);
-    loop {}
-    // panic!("Not ready for next stage");
-    // loop {}
-    // unsafe {
-    //     load_gdt();
-    //     next_stage(count);
-    // }
+    unsafe {
+        println_vbe!("Loading GDT");
+        load_gdt();
+        loop {}
+        println_vbe!("DONE");
+        // next_stage();
+    }
 }
 
-unsafe fn next_stage(count: u16) {
+unsafe fn next_stage() {
     // Perform long jump
     unsafe {
         asm!(
             // align the stack
+            "mov esp, ebp",
             "and esp, 0xffffff00",
-            // push arguments
-            "push {info:e}",
             // push entry point address
             "push {entry_point:e}",
-            info = in(reg) count as u32,
             entry_point = in(reg) STAGE_2_START as u32,
         );
         // Perform a "long jump" to one line down.
@@ -122,10 +120,10 @@ unsafe fn next_stage(count: u16) {
 }
 
 /// Disables interrupts and loads GDT
-#[inline(always)]
 unsafe fn load_gdt() {
     // Setup protected mode
     GDT_PROTECTED.load();
+    println_vbe!("Loaded GDT");
     unsafe {
         asm!(
             "cli",          // Disable inturrupts
