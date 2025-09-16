@@ -6,10 +6,14 @@
 use core::arch::asm;
 
 use common::config::STAGE_2_START;
-use common::mem::MemInfo;
-use common::vbe_display::{Font, VbeDisplayInfo};
-use common::{bios_info::BiosInfo, println_bios};
-use common::{gdt::*, println_vbe, static_variable::StaticVariable};
+use common::println_bios;
+use common::static_items::{
+    bios_info::BiosInfo,
+    mem::MemInfo,
+    static_variable::StaticVariable,
+    vbe_display::{Font, VbeDisplayInfo},
+};
+use common::{gdt::*, println_vbe};
 
 use vbe::init_graphical;
 

@@ -1,4 +1,4 @@
-use crate::{config::MEM_INFO, static_variable::StaticVariable};
+use crate::{config::MEM_INFO, static_items::static_variable::StaticVariable};
 
 #[repr(C)]
 pub struct MemInfo {

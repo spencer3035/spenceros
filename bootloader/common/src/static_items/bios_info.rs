@@ -1,4 +1,4 @@
-use crate::{config::BIOS_INFO, static_variable::StaticVariable};
+use crate::{config::BIOS_INFO, static_items::static_variable::StaticVariable};
 
 /// Info passed to the kernel
 #[repr(C)]

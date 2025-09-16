@@ -2,8 +2,8 @@ use core::fmt::Write;
 
 use crate::{
     config::FONT,
-    static_variable::StaticVariable,
-    vbe_display::{Font, VbeDisplayInfo},
+    static_items::static_variable::StaticVariable,
+    static_items::vbe_display::{Font, VbeDisplayInfo},
 };
 
 #[macro_export]

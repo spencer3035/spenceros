@@ -1,6 +1,8 @@
-use crate::bios_info::BiosInfo;
-use crate::mem::MemInfo;
-use crate::vbe_display::{Font, VbeDisplayInfo};
+use crate::static_items::{
+    bios_info::BiosInfo,
+    mem::MemInfo,
+    vbe_display::{Font, VbeDisplayInfo},
+};
 
 /// Helper to define the memory layout.
 ///

@@ -3,7 +3,7 @@ use core::ops::Deref;
 use crate::{
     config::{FONT, VBE_DISPLAY_INFO},
     io::framebuffer::FramebufferInfo,
-    static_variable::StaticVariable,
+    static_items::static_variable::StaticVariable,
 };
 
 /// Light wrapper around font array
