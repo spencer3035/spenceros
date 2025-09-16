@@ -57,12 +57,6 @@ fn main(_disk_number: u16) {
     // Safety: This is the only mutable reference.
     let memory_info = unsafe { MemInfo::get_mut() };
     detect_memory(memory_info);
-    println_vbe!("Loading GDT");
-    unsafe {
-        gdt::load_gdt();
-    }
-    println_vbe!("DONE");
-    loop {}
 }
 
 #[link_section = ".start"]
@@ -71,49 +65,59 @@ pub extern "C" fn _start(_disk_number: u16) {
     println_bios!("Stack used : 0x{:X}", get_stack_used());
     main(_disk_number);
     println_vbe!("About to enter next stage");
-    prompt_continue();
     unsafe {
         next_stage();
     }
 }
 
 unsafe fn next_stage() {
+    println_vbe!("Loading GDT");
+    unsafe {
+        gdt::load_gdt();
+    }
+    println_vbe!("Done");
     // Perform long jump
     unsafe {
         asm!(
             // align the stack
-            "mov esp, ebp",
+            // "mov esp, ebp",
             "and esp, 0xffffff00",
             // push entry point address
             "push {entry_point:e}",
             entry_point = in(reg) STAGE_2_START as u32,
         );
+        // loop {}
+        // TODO: Something seems to be broken with this
+        asm!(
+            // reload segment registers
+            "mov {0}, 0x2", // The 0x02 is the data segment
+            "mov ds, {0}",
+            "mov es, {0}",
+            "mov ss, {0}",
+            out(reg) _,
+        );
         // Perform a "long jump" to one line down.
+        loop {}
         asm!(
             // TODO: How do we know this is sector 0x8?
             // Note that 2f means jump (f)orward to the next local label "2:"
-            "ljmp $0x08, $2f",
+            "ljmp $0x01, $2f", // The 0x01 is the code segment
             // Relative label that we jump to
             "2:",
             options(att_syntax)
         );
+        loop {}
         asm!(
             ".code32",
 
-            // reload segment registers
-            "mov {0}, 0x10",
-            "mov ds, {0}",
-            "mov es, {0}",
-            "mov ss, {0}",
 
             // jump to stage-2
-            "pop {1}",
-            "call {1}",
+            "pop {0}",
+            "call {0}",
 
             // enter endless loop in case stage-2 returns
             "2:",
             "jmp 2b",
-            out(reg) _,
             out(reg) _,
         );
     }

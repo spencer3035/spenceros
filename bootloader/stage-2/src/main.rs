@@ -3,6 +3,7 @@
 
 use common::config::*;
 use common::gdt::*;
+use common::println_vbe;
 use core::arch::asm;
 
 #[allow(unused)]
@@ -42,7 +43,8 @@ struct MemoryMapEntry {
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    println!("Started protected mode");
+    println_vbe!("Started protected mode");
+    loop {}
 
     //let mut mmap_reader: *const MemoryMapEntry = MEMORY_MAP_START as *const MemoryMapEntry;
     //for ii in 0..count {

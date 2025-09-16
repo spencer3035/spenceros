@@ -2,13 +2,13 @@ use core::{arch::asm, ptr::addr_of};
 
 use common::{
     gdt::{Gdt, GdtPointer},
-    println_vbe,
     static_items::static_variable::StaticVariable as _,
 };
 
 static mut GDT_POINTER: GdtPointer = GdtPointer::null();
 
 /// Disables interrupts and loads GDT
+#[inline(always)]
 pub unsafe fn load_gdt() {
     // Setup protected mode
     let gdt_addr = unsafe {
@@ -24,8 +24,6 @@ pub unsafe fn load_gdt() {
     unsafe {
         asm!("lgdt [{}]", in(reg) addr_of!(GDT_POINTER), options(readonly, nostack, preserves_flags));
     }
-
-    println_vbe!("Loaded GDT");
     unsafe {
         asm!(
             "cli",          // Disable inturrupts
