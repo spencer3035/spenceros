@@ -16,7 +16,11 @@ pub mod io {
 
 /// Information that we pass to the kernel/OS
 pub mod bios_info;
+/// Information about memory
+pub mod mem;
 /// Static string methods
 pub mod static_string;
+/// Helper trait for defining static variables
+pub mod static_variable;
 /// Information about VBE display
 pub mod vbe_display;

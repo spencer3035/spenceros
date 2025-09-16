@@ -1,5 +1,6 @@
 use crate::bios_info::BiosInfo;
-use crate::vbe_display::VbeDisplayInfo;
+use crate::mem::MemInfo;
+use crate::vbe_display::{Font, VbeDisplayInfo};
 
 /// Helper to define the memory layout.
 ///
@@ -61,9 +62,11 @@ layout!(
     /// VBE Display info, used to print stuff to screen in VBE mode
     0x3000 => VBE_DISPLAY_INFO:  VbeDisplayInfo,
     /// Font for printing in VBE mode
-    0x4000 => FONT: [u8; 0x1000],
+    0x4000 => FONT: Font,
     /// Pointer to the bios info.
-    0x5000 => BIOS_INFO: BiosInfo ,
+    0x5000 => BIOS_INFO: BiosInfo,
+    /// Information about system's memory
+    0x5010 => MEM_INFO : MemInfo,
     /// Lowest address of the stack.
     ///
     /// The stack grows down so BP should be set to STACK_END (the last address) on boot

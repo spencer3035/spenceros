@@ -6,6 +6,7 @@ use common::config::FONT;
 use common::io::framebuffer::FramebufferInfo;
 use common::io::framebuffer::VbeDisplay;
 use common::println_bios;
+use common::static_variable::StaticVariable as _;
 use common::vbe_display::VbeDisplayInfo;
 
 /// Inits the VBE screen, should only be called once

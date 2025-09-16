@@ -33,7 +33,7 @@ impl core::fmt::Display for MemEntry {
 static mut MEM_ENTRY: MemEntry = MemEntry::null();
 
 /// Detects memory using int 0x15 with eax = 0xE820, returns number of entries read
-pub unsafe fn detect_memory() -> u16 {
+pub fn detect_memory() -> u16 {
     let int15_ax: u32 = 0xE820;
     // "SMAP"
     let magic_number: u32 = 0x534d4150;
@@ -60,6 +60,7 @@ pub unsafe fn detect_memory() -> u16 {
         // Size of our buffer in, number of bytes stored out
         buffer_bytes = size_of::<MemEntry>();
 
+        #[allow(unused_assignments)]
         unsafe {
             asm!(
                 // TODO: Figure out how to do this

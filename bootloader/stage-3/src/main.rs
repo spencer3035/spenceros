@@ -6,7 +6,7 @@ use core::arch::asm;
 #[cfg(target_os = "none")]
 #[panic_handler]
 #[cfg(target_os = "none")]
-fn panic(info: &core::panic::PanicInfo) -> ! {
+fn panic(_info: &core::panic::PanicInfo) -> ! {
     // println!("PANIC: {info}");
     loop {
         unsafe { asm!("hlt") }

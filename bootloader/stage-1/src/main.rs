@@ -6,8 +6,10 @@
 use core::arch::asm;
 
 use common::config::STAGE_2_START;
+use common::mem::MemInfo;
+use common::vbe_display::{Font, VbeDisplayInfo};
 use common::{bios_info::BiosInfo, println_bios};
-use common::{gdt::*, println_vbe};
+use common::{gdt::*, println_vbe, static_variable::StaticVariable};
 
 use vbe::init_graphical;
 
@@ -16,19 +18,31 @@ pub mod vbe;
 
 static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
+#[allow(unused)]
 mod utils;
 use utils::*;
+
+use crate::mem::detect_memory;
+
+/// Initalize all the variables we want to populate
+// We force inline to save space on the stack as this could take up lots of space
+#[inline(never)]
+fn init_static_values() {
+    // SAFETY: These should only be called once, we call them here
+    unsafe {
+        BiosInfo::init();
+        Font::init();
+        VbeDisplayInfo::init();
+        MemInfo::init();
+    }
+}
 
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
     println_bios!("Starting stage 1");
     enable_a20();
-
-    unsafe {
-        // SAFETY: Should only be called once, we call it here
-        BiosInfo::init();
-    };
+    init_static_values();
 
     if !has_cpuid() {
         panic!("CPUID not present");
@@ -36,7 +50,7 @@ pub extern "C" fn _start(_disk_number: u16) {
 
     init_graphical();
     println_vbe!("Detecting memory");
-    unsafe { mem::detect_memory() };
+    detect_memory();
     println_vbe!("DONE");
     loop {}
     // panic!("Not ready for next stage");

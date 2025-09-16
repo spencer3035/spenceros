@@ -1,6 +1,10 @@
 use core::fmt::Write;
 
-use crate::{config::FONT, vbe_display::VbeDisplayInfo};
+use crate::{
+    config::FONT,
+    static_variable::StaticVariable,
+    vbe_display::{Font, VbeDisplayInfo},
+};
 
 #[macro_export]
 macro_rules! println_vbe {
@@ -31,8 +35,6 @@ macro_rules! print_vbe {
         }
     };
 }
-
-pub type Font = [u8; 0x1000];
 
 const CHAR_WIDTH: u16 = 8;
 const CHAR_HEIGHT: u16 = 16;
@@ -145,7 +147,6 @@ impl FrameBuffer for FramebufferInfo {
         self.shift_up_impl(rows);
     }
 }
-
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FramebufferInfo {
