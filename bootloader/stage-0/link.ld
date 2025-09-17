@@ -1,12 +1,9 @@
 ENTRY(_start)
 
 SECTIONS {
-    . = 0x500;
-    _stack_start = .;
     . = 0x7c00;
-    _stack_end = .;
-
-    _mbr_start = .;
+    /* MARKER USED FOR TESTS, DO NOT REMOVE */
+    _start_address = .;
     .boot :
     {
         *(.boot .boot.*)
@@ -45,12 +42,13 @@ SECTIONS {
         QUAD(0)
     }
 
-    . = 0x7c00 + 0x200 - 2;
+    . = 0x7e00 - 2;
 
     .magic_number :
     {
         SHORT(0xaa55)       /* magic number for bootable disk */
     }
 
-    _end = .;
+    /* MARKER USED FOR TESTS, DO NOT REMOVE */
+    _end_address = .;
 }

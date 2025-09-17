@@ -84,10 +84,97 @@ fn main() {
 
 #[cfg(test)]
 mod test {
-    use super::*;
+    use std::process::Stdio;
 
+    use super::*;
     #[test]
     fn test_images_correct_size() {
         assert_sizes();
+    }
+
+    #[test]
+    fn test_link_addresses() {
+        let root_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let linker_files = [
+            (
+                "bootloader/stage-0/link.ld",
+                STAGE_0_START as usize,
+                size_of_val(unsafe { &(*STAGE_0_START) }),
+            ),
+            (
+                "bootloader/stage-1/link.ld",
+                STAGE_1_START as usize,
+                size_of_val(unsafe { &(*STAGE_1_START) }),
+            ),
+            (
+                "bootloader/stage-2/link.ld",
+                STAGE_2_START as usize,
+                size_of_val(unsafe { &(*STAGE_2_START) }),
+            ),
+            (
+                "bootloader/stage-3/link.ld",
+                STAGE_3_START as usize,
+                size_of_val(unsafe { &(*STAGE_3_START) }),
+            ),
+        ];
+        let paths: Vec<_> = linker_files
+            .iter()
+            .map(|(f, s, e)| {
+                let mut path = root_dir.to_path_buf();
+                path.push(f);
+                (path, s, e)
+            })
+            .collect();
+        for (p, start, size) in paths.into_iter() {
+            test_link_file(p, *start, *size);
+        }
+    }
+
+    fn test_link_file<P: AsRef<Path>>(p: P, start: usize, size: usize) {
+        assert!(p.as_ref().try_exists().unwrap());
+        let cmd = std::process::Command::new("ld")
+            .arg("-T")
+            .arg(p.as_ref())
+            .arg("-M")
+            .arg("/dev/null")
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap();
+
+        let out = String::from_utf8(cmd.wait_with_output().unwrap().stdout).unwrap();
+
+        let get_addr_from_line = |line: &str| {
+            let addr = line
+                .split_whitespace()
+                .next()
+                .unwrap()
+                .trim_start_matches("0x");
+            let addr: usize = usize::from_str_radix(addr, 16).unwrap();
+            addr
+        };
+
+        println!("Reading {}", p.as_ref().display());
+        for line in out.lines() {
+            if line.contains("_end_address") {
+                let addr = get_addr_from_line(line);
+                assert_eq!(
+                    addr,
+                    start + size,
+                    "{} should have _end_address 0x{:X}, found 0x{addr:X}",
+                    p.as_ref().display(),
+                    start + size,
+                );
+            } else if line.contains("_start_address") {
+                let addr = get_addr_from_line(line);
+                assert_eq!(
+                    addr,
+                    start,
+                    "{} should have _start_address 0x{:X}, found 0x{addr:X}",
+                    p.as_ref().display(),
+                    start,
+                );
+            }
+        }
     }
 }

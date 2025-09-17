@@ -1,8 +1,9 @@
 ENTRY(_start)
 
 SECTIONS {
-    /* STAGE_0_START + 0x200 */
-    . = 0x7c00 + 0x200;
+    . = 0x7e00;
+    /* MARKER USED FOR TESTS, DO NOT REMOVE */
+    _start_address = .;
 
     .start :
     {
@@ -31,10 +32,11 @@ SECTIONS {
     }
 
     _second_stage_end = .;
-    /* STAGE_0_START + 0x200 + 0x200 * STAGE_1_SECTIONS - 0x2 */
-    . = 0x7c00 + 0x200 + 0x200 * 0x30 - 0x2;
+    . = 0xde00 - 0x2;
     .end_marker :
     {
         SHORT(0xdead)
     }
+    /* MARKER USED FOR TESTS, DO NOT REMOVE */
+    _end_address = .;
 }
