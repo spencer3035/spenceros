@@ -4,6 +4,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use core::arch::asm;
+use core::ptr::addr_of;
 
 use common::config::STAGE_2_START;
 use common::println_bios;
@@ -62,6 +63,7 @@ fn main(_disk_number: u16) {
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start(_disk_number: u16) {
+    utils::print_unsafe_fn_location(next_stage);
     println_bios!("Stack used : 0x{:X}", get_stack_used());
     main(_disk_number);
     println_vbe!("About to enter next stage");
@@ -70,12 +72,50 @@ pub extern "C" fn _start(_disk_number: u16) {
     }
 }
 
+use common::gdt::{Gdt, GdtPointer};
+
+static mut GDT_POINTER: GdtPointer = GdtPointer::null();
+
+#[inline(never)]
 unsafe fn next_stage() {
     println_vbe!("Loading GDT");
+    // Setup protected mode
+    let gdt_addr = unsafe {
+        Gdt::init();
+        let gdt = Gdt::get_mut();
+        *gdt = Gdt::protected_mode();
+        gdt as *const Gdt
+    };
+
     unsafe {
-        gdt::load_gdt();
+        GDT_POINTER = GdtPointer::new(
+            gdt_addr,
+            (Gdt::NUM_ENTRIES * size_of::<u64> as u16 - 1) as u16,
+        );
+    };
+    unsafe {
+        asm!(
+            "cli",          // Disable inturrupts
+            "lgdt [{}]",
+             in(reg) addr_of!(GDT_POINTER),
+             options(readonly, nostack, preserves_flags)
+        );
+
+        let mut cr0: u32;
+        asm!(
+            "mov {:e}, cr0", // Set protection enable bit
+            out(reg) cr0,
+            options(nomem,nostack,preserves_flags),
+        );
+
+        let cr0_protected = cr0 | 1;
+
+        asm!(
+            "mov cr0, {:e}",
+            in(reg) cr0_protected,
+            options(nostack,preserves_flags)
+        );
     }
-    println_vbe!("Done");
     // Perform long jump
     unsafe {
         asm!(
@@ -86,30 +126,25 @@ unsafe fn next_stage() {
             "push {entry_point:e}",
             entry_point = in(reg) STAGE_2_START as u32,
         );
-        // loop {}
+        // println_vbe!("DONE");
         // TODO: Something seems to be broken with this
+        // Perform a "long jump" to one line down.
         asm!(
             // reload segment registers
-            "mov {0}, 0x2", // The 0x02 is the data segment
-            "mov ds, {0}",
-            "mov es, {0}",
-            "mov ss, {0}",
-            out(reg) _,
-        );
-        // Perform a "long jump" to one line down.
-        loop {}
-        asm!(
             // TODO: How do we know this is sector 0x8?
             // Note that 2f means jump (f)orward to the next local label "2:"
-            "ljmp $0x01, $2f", // The 0x01 is the code segment
+            "ljmp $0x08, $2f",
             // Relative label that we jump to
             "2:",
-            options(att_syntax)
+            options(att_syntax, nostack)
         );
-        loop {}
         asm!(
             ".code32",
 
+            "mov {0}, 0x10", // The 0x02 is the data segment
+            "mov ds, {0}",
+            "mov es, {0}",
+            "mov ss, {0}",
 
             // jump to stage-2
             "pop {0}",

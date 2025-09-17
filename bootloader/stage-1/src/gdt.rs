@@ -19,10 +19,10 @@ pub unsafe fn load_gdt() {
     };
 
     unsafe {
-        GDT_POINTER = GdtPointer::new(gdt_addr, Gdt::NUM_ENTRIES - 1);
+        GDT_POINTER = GdtPointer::new(gdt_addr, Gdt::NUM_ENTRIES);
     };
     unsafe {
-        asm!("lgdt [{}]", in(reg) addr_of!(GDT_POINTER), options(readonly, nostack, preserves_flags));
+        asm!("lgdt [{}]", in(reg) addr_of!(GDT_POINTER));
     }
     unsafe {
         asm!(

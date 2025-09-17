@@ -116,6 +116,11 @@ pub fn get_stack_left() -> u32 {
     total - used
 }
 
+pub fn print_unsafe_fn_location(f: unsafe fn()) {
+    let addr: usize = f as *const () as usize;
+    println_bios!("fn: 0x{addr:X}");
+}
+
 pub fn print_fn_location(f: fn()) {
     let addr: usize = f as *const () as usize;
     println_bios!("fn: 0x{addr:X}");
