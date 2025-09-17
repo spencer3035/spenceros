@@ -67,7 +67,7 @@ pub extern "C" fn _start(_disk_number: u16) {
 #[inline(never)]
 unsafe fn next_stage() {
     unsafe {
-        protected_mode::load_protected_gdt();
+        protected_mode::load_protected_gdt_and_disable_interrupts();
         protected_mode::set_protected_flag();
         protected_mode::jump_next_stage();
     }
