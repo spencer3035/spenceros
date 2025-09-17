@@ -8,7 +8,25 @@ use common::{
 
 pub(crate) static mut GDT_POINTER: GdtPointer = GdtPointer::null();
 
-pub(crate) unsafe fn load_protected_gdt_and_disable_interrupts() {
+/// Disable interrupts
+///
+/// SAFETY: This has concequences that can effect things in unexpected ways, use with care and
+/// understanding
+pub(crate) unsafe fn disable_interrupts() {
+    unsafe {
+        asm!(
+            // This clears inturrupts, this should be right next to lgdt. If you move it it can
+            // cause undefined behavior
+            "cli",
+            options(readonly, nostack, preserves_flags)
+        );
+    }
+}
+
+/// Loads the GDT for protected mode
+///
+/// SAFETY: Interrupts should be disabled before calling
+pub(crate) unsafe fn load_protected_gdt() {
     unsafe {
         let gdt_addr = {
             Gdt::init();
@@ -21,9 +39,6 @@ pub(crate) unsafe fn load_protected_gdt_and_disable_interrupts() {
             (Gdt::NUM_ENTRIES * size_of::<u64> as u16 - 1) as u16,
         );
         asm!(
-            // This clears inturrupts, this should be right next to lgdt. If you move it it can
-            // cause undefined behavior
-            "cli",
             "lgdt [{}]",
              in(reg) addr_of!(GDT_POINTER),
              options(readonly, nostack, preserves_flags)
