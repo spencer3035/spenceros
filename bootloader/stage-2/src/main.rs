@@ -40,8 +40,6 @@ struct MemoryMapEntry {
     attributes: u32,
 }
 
-pub mod idt;
-
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
