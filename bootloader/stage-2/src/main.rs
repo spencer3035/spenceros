@@ -3,6 +3,7 @@
 
 use common::config::*;
 use common::gdt::*;
+use common::print_vbe;
 use common::println_vbe;
 use core::arch::asm;
 
@@ -40,9 +41,9 @@ struct MemoryMapEntry {
     attributes: u32,
 }
 
-#[link_section = ".start"]
-#[no_mangle]
-pub extern "C" fn _start() -> ! {
+mod keyboard_ps_2;
+
+fn start() -> ! {
     println_vbe!("Started protected mode");
     // idt::setup_idt();
     // println_vbe!("DONE");
@@ -60,12 +61,25 @@ pub extern "C" fn _start() -> ! {
         panic!("No long mode!");
     }
     println_vbe!("Checkpoint");
-    loop {}
-
-    unsafe {
-        println!("Setting up paging");
-        load_page_tables();
+    loop {
+        let ch = keyboard_ps_2::wait_keypress();
+        print_vbe!("{ch}");
     }
+
+    // unsafe {
+    //     println!("Setting up paging");
+    //     load_page_tables();
+    // }
+    // enter_stage_3();
+}
+
+#[link_section = ".start"]
+#[no_mangle]
+pub extern "C" fn _start() -> ! {
+    start();
+}
+
+fn enter_stage_3() {
     // Enter enable paging and enter 32 bit compatability submode of long mode
     {
         // TODO: Something is probably broken here
@@ -214,6 +228,7 @@ unsafe fn load_page_tables() {
 }
 
 // Uses CPUID to check for long mode
+#[inline(never)]
 fn has_long_mode() -> bool {
     let eax: u32;
     unsafe {
