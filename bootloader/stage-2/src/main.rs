@@ -1,5 +1,6 @@
 #![no_std]
 #![no_main]
+#![recursion_limit = "512"]
 
 use common::config::*;
 use common::gdt::*;
