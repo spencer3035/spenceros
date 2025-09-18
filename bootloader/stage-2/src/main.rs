@@ -40,11 +40,14 @@ struct MemoryMapEntry {
     attributes: u32,
 }
 
+pub mod idt;
+
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
     println_vbe!("Started protected mode");
-    loop {}
+    // idt::setup_idt();
+    // println_vbe!("DONE");
 
     //let mut mmap_reader: *const MemoryMapEntry = MEMORY_MAP_START as *const MemoryMapEntry;
     //for ii in 0..count {
@@ -58,6 +61,8 @@ pub extern "C" fn _start() -> ! {
     if !has_long_mode() {
         panic!("No long mode!");
     }
+    println_vbe!("Checkpoint");
+    loop {}
 
     unsafe {
         println!("Setting up paging");
