@@ -42,7 +42,7 @@ fn gen_has_next(items: &[VariantInfo]) -> TokenStream {
     for kc in items.iter() {
         // Iterating over windows of size two ensures that the lower end of the window is not the
         // terminal value, so therefore it has a next value.
-        for (code_ii, code_win) in kc.down.windows(2).enumerate() {
+        for (code_ii, code_win) in kc.press.windows(2).enumerate() {
             let code_curr = &code_win[0];
             let or_code = quote! { || code == #code_curr };
             if let Some(imp) = impls.get_mut(&(code_ii as u8)) {
@@ -54,7 +54,7 @@ fn gen_has_next(items: &[VariantInfo]) -> TokenStream {
                 impls.insert(code_ii as u8, val);
             }
         }
-        for (code_ii, code_win) in kc.up.windows(2).enumerate() {
+        for (code_ii, code_win) in kc.release.windows(2).enumerate() {
             let code_curr = &code_win[0];
             let or_code = quote! { || code == #code_curr };
             if let Some(imp) = impls.get_mut(&(code_ii as u8)) {
@@ -109,7 +109,7 @@ fn gen_has_next(items: &[VariantInfo]) -> TokenStream {
 /// #}
 /// #impl KeyCode {
 /// #
-/// fn to_char(&self) -> Option<char> {
+/// fn to_char_lower(&self) -> Option<char> {
 ///     match self {
 ///         Self::KcEsc => None,
 ///         Self::Kc1 => Some('1'),
@@ -118,19 +118,40 @@ fn gen_has_next(items: &[VariantInfo]) -> TokenStream {
 ///         Self::Kc4 => Some('4'),
 ///     }
 /// }
+/// fn to_char_upper(&self) -> Option<char> {
+///     match self {
+///         Self::KcEsc => None,
+///         Self::Kc1 => Some('!'),
+///         Self::Kc2 => Some('@'),
+///         Self::Kc3 => Some('#'),
+///         Self::Kc4 => Some('$'),
+///     }
+/// }
 /// #}
 /// ```
 fn gen_to_char(items: &[VariantInfo]) -> TokenStream {
     let names = items.iter().map(|i| &i.name);
-    let chars = items.iter().map(|i| match &i.ch {
+    let names2 = items.iter().map(|i| &i.name);
+    let chars_lower = items.iter().map(|i| match &i.ch_lower {
+        Some(ch) => quote!(Some(#ch)),
+        None => quote!(None),
+    });
+    let chars_upper = items.iter().map(|i| match &i.ch_upper {
         Some(ch) => quote!(Some(#ch)),
         None => quote!(None),
     });
     quote! {
-        fn to_char(&self) -> Option<char> {
+        fn to_char_lower(&self) -> Option<char> {
             match self {
             #(
-                Self::#names => #chars,
+                Self::#names => #chars_lower,
+            )*
+            }
+        }
+        fn to_char_upper(&self) -> Option<char> {
+            match self {
+            #(
+                Self::#names2 => #chars_upper,
             )*
             }
         }
@@ -180,7 +201,7 @@ fn gen_from_scancode_and_depth(items: &[VariantInfo]) -> TokenStream {
     for kc in items.iter() {
         let name = &kc.name;
         // Down pressed
-        for (code_ii, code_curr) in kc.down.iter().enumerate() {
+        for (code_ii, code_curr) in kc.press.iter().enumerate() {
             let else_if = quote! {
                 else if code == #code_curr {
                     Some((Self::#name, true))
@@ -196,7 +217,7 @@ fn gen_from_scancode_and_depth(items: &[VariantInfo]) -> TokenStream {
             }
         }
         // Up presses
-        for (code_ii, code_curr) in kc.up.iter().enumerate() {
+        for (code_ii, code_curr) in kc.release.iter().enumerate() {
             let else_if = quote! {
                 else if code == #code_curr {
                     Some((Self::#name, false))

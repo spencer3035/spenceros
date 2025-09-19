@@ -13,9 +13,10 @@ use super::SCAN_TRAIT;
 /// Information about the variant along with it's identifier
 pub struct VariantInfo {
     pub name: Ident,
-    pub down: Vec<Literal>,
-    pub up: Vec<Literal>,
-    pub ch: Option<Literal>,
+    pub press: Vec<Literal>,
+    pub release: Vec<Literal>,
+    pub ch_lower: Option<Literal>,
+    pub ch_upper: Option<Literal>,
 }
 
 /// Expect the attribute to be applied to an enum
@@ -31,39 +32,53 @@ pub fn expect_enum(input: &DeriveInput) -> syn::Result<&DataEnum> {
 
 /// Values that are contained in each attribute
 pub struct ScanValues {
-    pub down: Vec<Literal>,
-    pub up: Vec<Literal>,
-    pub ch: Option<Literal>,
+    pub press: Vec<Literal>,
+    pub release: Vec<Literal>,
+    pub ch_lower: Option<Literal>,
+    pub ch_upper: Option<Literal>,
 }
 
 impl Parse for ScanValues {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         // Down
         let kv: KeyValue<BracketedList<Literal>> = input.parse()?;
-        if kv.key != "down" {
-            return Err(input.error("missing 'down'"));
+        if kv.key != "press" {
+            return Err(input.error("missing 'press'"));
         }
-        let down = kv.value.list.into_iter().collect();
+        let press = kv.value.list.into_iter().collect();
         _ = input.parse::<Token![,]>()?;
         // Up
         let kv: KeyValue<BracketedList<Literal>> = input.parse()?;
-        if kv.key != "up" {
-            return Err(input.error("missing 'up'"));
+        if kv.key != "release" {
+            return Err(input.error("missing 'release'"));
         }
-        let up = kv.value.list.into_iter().collect();
+        let release = kv.value.list.into_iter().collect();
         // Optional char
-        let mut ch = None;
+        let mut ch_lower = None;
+        let mut ch_upper = None;
         if input.parse::<Token![,]>().is_ok() {
-            if let Ok(kv) = input.parse::<KeyValue<Literal>>() {
-                if kv.key != "ch" {
-                    return Err(input.error("missing 'ch'"));
+            let kv = input.parse::<KeyValue<Literal>>()?;
+            if kv.key != "lower" {
+                return Err(input.error("missing 'lower'"));
+            } else {
+                ch_lower = Some(kv.value)
+            }
+            if input.parse::<Token![,]>().is_ok() {
+                let kv = input.parse::<KeyValue<Literal>>()?;
+                if kv.key != "upper" {
+                    return Err(input.error("missing 'upper'"));
                 } else {
-                    ch = Some(kv.value)
+                    ch_upper = Some(kv.value)
                 }
             }
         }
 
-        Ok(ScanValues { down, up, ch })
+        Ok(ScanValues {
+            press,
+            release,
+            ch_lower,
+            ch_upper,
+        })
     }
 }
 

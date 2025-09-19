@@ -147,8 +147,10 @@ pub trait FromScancodes: Sized {
     /// Gets the scancode given the terminal code and the number of codes, as well as if it is a
     /// down press or not (_, true) is downpress, (_, false) is a release.
     fn from_scancode_and_depth(code: u8, index: u8) -> Option<(Self, bool)>;
-    /// Tries to conver the key to a character
-    fn to_char(&self) -> Option<char>;
+    /// Tries to conver the key to an unshifted character
+    fn to_char_lower(&self) -> Option<char>;
+    /// Tries to conver the key to a shifted character
+    fn to_char_upper(&self) -> Option<char>;
 }
 
 pub enum Modifier {
@@ -196,255 +198,255 @@ impl KeyCode {
 #[derive(FromScancodes, Debug, PartialEq, Eq)]
 pub enum KeyCode {
     /// Escape
-    #[scan(down=[0x01],up=[0x81])]
+    #[scan(press=[0x01],release=[0x81])]
     KcEsc,
-    #[scan(down=[0x02],up=[0x82],ch='1')]
+    #[scan(press=[0x02],release=[0x82],lower='1',upper='!')]
     Kc1,
-    #[scan(down=[0x03],up=[0x83],ch='2')]
+    #[scan(press=[0x03],release=[0x83],lower='2',upper='@')]
     Kc2,
-    #[scan(down=[0x04],up=[0x84],ch='3')]
+    #[scan(press=[0x04],release=[0x84],lower='3',upper='#')]
     Kc3,
-    #[scan(down=[0x05],up=[0x85],ch='4')]
+    #[scan(press=[0x05],release=[0x85],lower='4',upper='$')]
     Kc4,
-    #[scan(down=[0x06],up=[0x86],ch='5')]
+    #[scan(press=[0x06],release=[0x86],lower='5',upper='%')]
     Kc5,
-    #[scan(down=[0x07],up=[0x87],ch='6')]
+    #[scan(press=[0x07],release=[0x87],lower='6',upper='^')]
     Kc6,
-    #[scan(down=[0x08],up=[0x88],ch='7')]
+    #[scan(press=[0x08],release=[0x88],lower='7',upper='&')]
     Kc7,
-    #[scan(down=[0x09],up=[0x89],ch='8')]
+    #[scan(press=[0x09],release=[0x89],lower='8',upper='*')]
     Kc8,
-    #[scan(down=[0x0A],up=[0x8A],ch='9')]
+    #[scan(press=[0x0A],release=[0x8A],lower='9',upper='(')]
     Kc9,
-    #[scan(down=[0x0B],up=[0x8B],ch='0')]
+    #[scan(press=[0x0B],release=[0x8B],lower='0',upper=')')]
     Kc0,
-    #[scan(down=[0x0C],up=[0x8C],ch='-')]
+    #[scan(press=[0x0C],release=[0x8C],lower='-',upper='_')]
     KcMinus,
-    #[scan(down=[0x0D],up=[0x8D],ch='=')]
+    #[scan(press=[0x0D],release=[0x8D],lower='=',upper='+')]
     KcEquals,
-    #[scan(down=[0x0E],up=[0x8E])]
+    #[scan(press=[0x0E],release=[0x8E])]
     KcBackspace,
-    #[scan(down=[0x0F],up=[0x8F])]
+    #[scan(press=[0x0F],release=[0x8F])]
     KcTab,
-    #[scan(down=[0x10],up=[0x90],ch='Q')]
+    #[scan(press=[0x10],release=[0x90],lower='q',upper='Q')]
     KcQ,
-    #[scan(down=[0x11],up=[0x91],ch='W')]
+    #[scan(press=[0x11],release=[0x91],lower='w',upper='W')]
     KcW,
-    #[scan(down=[0x12],up=[0x92],ch='E')]
+    #[scan(press=[0x12],release=[0x92],lower='e',upper='E')]
     KcE,
-    #[scan(down=[0x13],up=[0x93],ch='R')]
+    #[scan(press=[0x13],release=[0x93],lower='r',upper='R')]
     KcR,
-    #[scan(down=[0x14],up=[0x94],ch='T')]
+    #[scan(press=[0x14],release=[0x94],lower='t',upper='T')]
     KcT,
-    #[scan(down=[0x15],up=[0x95],ch='Y')]
+    #[scan(press=[0x15],release=[0x95],lower='y',upper='Y')]
     KcY,
-    #[scan(down=[0x16],up=[0x96],ch='U')]
+    #[scan(press=[0x16],release=[0x96],lower='u',upper='U')]
     KcU,
-    #[scan(down=[0x17],up=[0x97],ch='I')]
+    #[scan(press=[0x17],release=[0x97],lower='i',upper='I')]
     KcI,
-    #[scan(down=[0x18],up=[0x98],ch='O')]
+    #[scan(press=[0x18],release=[0x98],lower='o',upper='O')]
     KcO,
-    #[scan(down=[0x19],up=[0x99],ch='P')]
+    #[scan(press=[0x19],release=[0x99],lower='p',upper='P')]
     KcP,
-    #[scan(down=[0x1A],up=[0x9A],ch='[')]
+    #[scan(press=[0x1A],release=[0x9A],lower='[',upper='{')]
     KcOpenSquare,
-    #[scan(down=[0x1B],up=[0x9B],ch=']')]
+    #[scan(press=[0x1B],release=[0x9B],lower=']',upper='}')]
     KcCloseSquare,
-    #[scan(down=[0x1C],up=[0x9C])]
+    #[scan(press=[0x1C],release=[0x9C])]
     KcEnter,
-    #[scan(down=[0x1D],up=[0x9D])]
+    #[scan(press=[0x1D],release=[0x9D])]
     KcLeftControl,
-    #[scan(down=[0x1E],up=[0x9E],ch='A')]
+    #[scan(press=[0x1E],release=[0x9E],lower='a',upper='A')]
     KcA,
-    #[scan(down=[0x1F],up=[0x9F],ch='S')]
+    #[scan(press=[0x1F],release=[0x9F],lower='s',upper='S')]
     KcS,
-    #[scan(down=[0x20],up=[0xA0],ch='D')]
+    #[scan(press=[0x20],release=[0xA0],lower='d',upper='D')]
     KcD,
-    #[scan(down=[0x21],up=[0xA1],ch='F')]
+    #[scan(press=[0x21],release=[0xA1],lower='f',upper='F')]
     KcF,
-    #[scan(down=[0x22],up=[0xA2],ch='G')]
+    #[scan(press=[0x22],release=[0xA2],lower='g',upper='G')]
     KcG,
-    #[scan(down=[0x23],up=[0xA3],ch='H')]
+    #[scan(press=[0x23],release=[0xA3],lower='h',upper='H')]
     KcH,
-    #[scan(down=[0x24],up=[0xA4],ch='J')]
+    #[scan(press=[0x24],release=[0xA4],lower='j',upper='J')]
     KcJ,
-    #[scan(down=[0x25],up=[0xA5],ch='K')]
+    #[scan(press=[0x25],release=[0xA5],lower='k',upper='K')]
     KcK,
-    #[scan(down=[0x26],up=[0xA6],ch='L')]
+    #[scan(press=[0x26],release=[0xA6],lower='l',upper='L')]
     KcL,
-    #[scan(down=[0x27],up=[0xA7],ch=';')]
+    #[scan(press=[0x27],release=[0xA7],lower=';',upper=':')]
     KcSemiColon,
-    #[scan(down=[0x28],up=[0xA8],ch='\'')]
+    #[scan(press=[0x28],release=[0xA8],lower='\'',upper='"')]
     KcSingleQuote,
-    #[scan(down=[0x29],up=[0xA9],ch='`')]
+    #[scan(press=[0x29],release=[0xA9],lower='`',upper='~')]
     KcTick,
-    #[scan(down=[0x2A],up=[0xAA])]
+    #[scan(press=[0x2A],release=[0xAA])]
     KcLeftShift,
-    #[scan(down=[0x2B],up=[0xAB],ch='\\')]
+    #[scan(press=[0x2B],release=[0xAB],lower='\\',upper='|')]
     KcBackSlash,
-    #[scan(down=[0x2C],up=[0xAC],ch='Z')]
+    #[scan(press=[0x2C],release=[0xAC],lower='z',upper='Z')]
     KcZ,
-    #[scan(down=[0x2D],up=[0xAD],ch='X')]
+    #[scan(press=[0x2D],release=[0xAD],lower='x',upper='X')]
     KcX,
-    #[scan(down=[0x2E],up=[0xAE],ch='C')]
+    #[scan(press=[0x2E],release=[0xAE],lower='c',upper='C')]
     KcC,
-    #[scan(down=[0x2F],up=[0xAF],ch='V')]
+    #[scan(press=[0x2F],release=[0xAF],lower='v',upper='V')]
     KcV,
-    #[scan(down=[0x30],up=[0xB0],ch='B')]
+    #[scan(press=[0x30],release=[0xB0],lower='b',upper='B')]
     KcB,
-    #[scan(down=[0x31],up=[0xB1],ch='N')]
+    #[scan(press=[0x31],release=[0xB1],lower='n',upper='N')]
     KcN,
-    #[scan(down=[0x32],up=[0xB2],ch='M')]
+    #[scan(press=[0x32],release=[0xB2],lower='m',upper='M')]
     KcM,
-    #[scan(down=[0x33],up=[0xB3],ch=',')]
+    #[scan(press=[0x33],release=[0xB3],lower=',',upper='<')]
     KcComma,
-    #[scan(down=[0x34],up=[0xB4],ch='.')]
+    #[scan(press=[0x34],release=[0xB4],lower='.',upper='>')]
     KcPeriod,
-    #[scan(down=[0x35],up=[0xB5],ch='/')]
+    #[scan(press=[0x35],release=[0xB5],lower='/',upper='?')]
     KcForwardSlash,
-    #[scan(down=[0x36],up=[0xB6])]
+    #[scan(press=[0x36],release=[0xB6])]
     KcRightShift,
     // TODO: I use this to test error handling, uncomment when done
-    // #[scan(down=[0x37],up=[0xB7],ch='*')]
+    // #[scan(press=[0x37],release=[0xB7],lower='*',upper='')]
     // KcKpAst,
-    #[scan(down=[0x38],up=[0xB8])]
+    #[scan(press=[0x38],release=[0xB8])]
     KcLeftAlt,
-    #[scan(down=[0x39],up=[0xB9],ch=' ')]
+    #[scan(press=[0x39],release=[0xB9],lower=' ',upper=' ')]
     KcSpace,
-    #[scan(down=[0x3A],up=[0xBA])]
+    #[scan(press=[0x3A],release=[0xBA])]
     KcCapsLock,
-    #[scan(down=[0x3B],up=[0xBB])]
+    #[scan(press=[0x3B],release=[0xBB])]
     KcF1,
-    #[scan(down=[0x3C],up=[0xBC])]
+    #[scan(press=[0x3C],release=[0xBC])]
     KcF2,
-    #[scan(down=[0x3D],up=[0xBD])]
+    #[scan(press=[0x3D],release=[0xBD])]
     KcF3,
-    #[scan(down=[0x3E],up=[0xBE])]
+    #[scan(press=[0x3E],release=[0xBE])]
     KcF4,
-    #[scan(down=[0x3F],up=[0xBF])]
+    #[scan(press=[0x3F],release=[0xBF])]
     KcF5,
-    #[scan(down=[0x40],up=[0xC0])]
+    #[scan(press=[0x40],release=[0xC0])]
     KcF6,
-    #[scan(down=[0x41],up=[0xC1])]
+    #[scan(press=[0x41],release=[0xC1])]
     KcF7,
-    #[scan(down=[0x42],up=[0xC2])]
+    #[scan(press=[0x42],release=[0xC2])]
     KcF8,
-    #[scan(down=[0x43],up=[0xC3])]
+    #[scan(press=[0x43],release=[0xC3])]
     KcF9,
-    #[scan(down=[0x44],up=[0xC4])]
+    #[scan(press=[0x44],release=[0xC4])]
     KcF10,
-    #[scan(down=[0x45],up=[0xC5])]
+    #[scan(press=[0x45],release=[0xC5])]
     KcNumberLock,
-    #[scan(down=[0x46],up=[0xC6])]
+    #[scan(press=[0x46],release=[0xC6])]
     KcScrollLock,
-    #[scan(down=[0x47],up=[0xC7],ch='7')]
+    #[scan(press=[0x47],release=[0xC7],lower='7')]
     KcKp7,
-    #[scan(down=[0x48],up=[0xC8],ch='8')]
+    #[scan(press=[0x48],release=[0xC8],lower='8')]
     KcKp8,
-    #[scan(down=[0x49],up=[0xC9],ch='9')]
+    #[scan(press=[0x49],release=[0xC9],lower='9')]
     KcKp9,
-    #[scan(down=[0x4A],up=[0xCA],ch='-')]
+    #[scan(press=[0x4A],release=[0xCA],lower='-')]
     KcKpMinus,
-    #[scan(down=[0x4B],up=[0xCB],ch='4')]
+    #[scan(press=[0x4B],release=[0xCB],lower='4')]
     KcKp4,
-    #[scan(down=[0x4C],up=[0xCC],ch='5')]
+    #[scan(press=[0x4C],release=[0xCC],lower='5')]
     KcKp5,
-    #[scan(down=[0x4D],up=[0xCD],ch='6')]
+    #[scan(press=[0x4D],release=[0xCD],lower='6')]
     KcKp6,
-    #[scan(down=[0x4E],up=[0xCE],ch='+')]
+    #[scan(press=[0x4E],release=[0xCE],lower='+')]
     KcKpPlus,
-    #[scan(down=[0x4F],up=[0xCF],ch='1')]
+    #[scan(press=[0x4F],release=[0xCF],lower='1')]
     KcKp1,
-    #[scan(down=[0x50],up=[0xD0],ch='2')]
+    #[scan(press=[0x50],release=[0xD0],lower='2')]
     KcKp2,
-    #[scan(down=[0x51],up=[0xD1],ch='3')]
+    #[scan(press=[0x51],release=[0xD1],lower='3')]
     KcKp3,
-    #[scan(down=[0x52],up=[0xD2],ch='0')]
+    #[scan(press=[0x52],release=[0xD2],lower='0')]
     KcKp0,
-    #[scan(down=[0x53],up=[0xD3],ch='.')]
+    #[scan(press=[0x53],release=[0xD3],lower='.')]
     KcKpPeriod,
-    #[scan(down=[0x57],up=[0xD7])]
+    #[scan(press=[0x57],release=[0xD7])]
     KcF11,
-    #[scan(down=[0x58],up=[0xD8])]
+    #[scan(press=[0x58],release=[0xD8])]
     KcF12,
-    #[scan(down=[0xE0,0x10],up=[0xE0,0x90])]
+    #[scan(press=[0xE0,0x10],release=[0xE0,0x90])]
     KcMultiMediaTrackPrevious,
-    #[scan(down=[0xE0,0x19],up=[0xE0,0x99])]
+    #[scan(press=[0xE0,0x19],release=[0xE0,0x99])]
     KcMultiMediaTrackNext,
-    #[scan(down=[0xE0,0x1C],up=[0xE0,0x9C])]
+    #[scan(press=[0xE0,0x1C],release=[0xE0,0x9C])]
     KcKpEnter,
-    #[scan(down=[0xE0,0x1D],up=[0xE0,0x9D])]
+    #[scan(press=[0xE0,0x1D],release=[0xE0,0x9D])]
     KcRightCtrl,
-    #[scan(down=[0xE0,0x20],up=[0xE0,0xA0])]
+    #[scan(press=[0xE0,0x20],release=[0xE0,0xA0])]
     KcMultiMediaMute,
-    #[scan(down=[0xE0,0x21],up=[0xE0,0xA1])]
+    #[scan(press=[0xE0,0x21],release=[0xE0,0xA1])]
     KcMultiMediaCalculator,
-    #[scan(down=[0xE0,0x22],up=[0xE0,0xA2])]
+    #[scan(press=[0xE0,0x22],release=[0xE0,0xA2])]
     KcMultiMediaPlay,
-    #[scan(down=[0xE0,0x24],up=[0xE0,0xA4])]
+    #[scan(press=[0xE0,0x24],release=[0xE0,0xA4])]
     KcMultiMediaStop,
-    #[scan(down=[0xE0,0x2E],up=[0xE0,0xAE])]
+    #[scan(press=[0xE0,0x2E],release=[0xE0,0xAE])]
     KcMultiMediaVolumeDown,
-    #[scan(down=[0xE0,0x30],up=[0xE0,0xB0])]
+    #[scan(press=[0xE0,0x30],release=[0xE0,0xB0])]
     KcMultiMediaVolumeUp,
-    #[scan(down=[0xE0,0x32],up=[0xE0,0xB2])]
+    #[scan(press=[0xE0,0x32],release=[0xE0,0xB2])]
     KcMultiMediaWwwHome,
-    #[scan(down=[0xE0,0x35],up=[0xE0,0xB5],ch='/')]
+    #[scan(press=[0xE0,0x35],release=[0xE0,0xB5],lower='/',upper='/')]
     KcKpForwardSlash,
-    #[scan(down=[0xE0,0x38],up=[0xE0,0xB8])]
+    #[scan(press=[0xE0,0x38],release=[0xE0,0xB8])]
     KcRightAlt,
-    #[scan(down=[0xE0,0x47],up=[0xE0,0xC7])]
+    #[scan(press=[0xE0,0x47],release=[0xE0,0xC7])]
     KcHome,
-    #[scan(down=[0xE0,0x48],up=[0xE0,0xC8])]
+    #[scan(press=[0xE0,0x48],release=[0xE0,0xC8])]
     KcUp,
-    #[scan(down=[0xE0,0x49],up=[0xE0,0xC9])]
+    #[scan(press=[0xE0,0x49],release=[0xE0,0xC9])]
     KcPageUp,
-    #[scan(down=[0xE0,0x4B],up=[0xE0,0xCB])]
+    #[scan(press=[0xE0,0x4B],release=[0xE0,0xCB])]
     KcLeft,
-    #[scan(down=[0xE0,0x4D],up=[0xE0,0xCD])]
+    #[scan(press=[0xE0,0x4D],release=[0xE0,0xCD])]
     KcRight,
-    #[scan(down=[0xE0,0x4F],up=[0xE0,0xCF])]
+    #[scan(press=[0xE0,0x4F],release=[0xE0,0xCF])]
     KcEnd,
-    #[scan(down=[0xE0,0x50],up=[0xE0,0xD0])]
+    #[scan(press=[0xE0,0x50],release=[0xE0,0xD0])]
     KcDown,
-    #[scan(down=[0xE0,0x51],up=[0xE0,0xD1])]
+    #[scan(press=[0xE0,0x51],release=[0xE0,0xD1])]
     KcPageDown,
-    #[scan(down=[0xE0,0x52],up=[0xE0,0xD2])]
+    #[scan(press=[0xE0,0x52],release=[0xE0,0xD2])]
     KcInsert,
-    #[scan(down=[0xE0,0x53],up=[0xE0,0xD3])]
+    #[scan(press=[0xE0,0x53],release=[0xE0,0xD3])]
     KcDelete,
-    #[scan(down=[0xE0,0x5B],up=[0xE0,0xDB])]
+    #[scan(press=[0xE0,0x5B],release=[0xE0,0xDB])]
     KcLeftGui,
-    #[scan(down=[0xE0,0x5C],up=[0xE0,0xDC])]
+    #[scan(press=[0xE0,0x5C],release=[0xE0,0xDC])]
     KcRightGui,
-    #[scan(down=[0xE0,0x5D],up=[0xE0,0xDD])]
+    #[scan(press=[0xE0,0x5D],release=[0xE0,0xDD])]
     KcApps,
-    #[scan(down=[0xE0,0x5E],up=[0xE0,0xDE])]
+    #[scan(press=[0xE0,0x5E],release=[0xE0,0xDE])]
     KcAcpiPower,
-    #[scan(down=[0xE0,0x5F],up=[0xE0,0xDF])]
+    #[scan(press=[0xE0,0x5F],release=[0xE0,0xDF])]
     KcAcpiSleep,
-    #[scan(down=[0xE0,0x63],up=[0xE0,0xE3])]
+    #[scan(press=[0xE0,0x63],release=[0xE0,0xE3])]
     KcAcpiWake,
-    #[scan(down=[0xE0,0x65],up=[0xE0,0xE5])]
+    #[scan(press=[0xE0,0x65],release=[0xE0,0xE5])]
     KcMultiMediaWwwSearch,
-    #[scan(down=[0xE0,0x66],up=[0xE0,0xE6])]
+    #[scan(press=[0xE0,0x66],release=[0xE0,0xE6])]
     KcMultiMediaWwwFavorites,
-    #[scan(down=[0xE0,0x67],up=[0xE0,0xE7])]
+    #[scan(press=[0xE0,0x67],release=[0xE0,0xE7])]
     KcMultiMediaWwwRefresh,
-    #[scan(down=[0xE0,0x68],up=[0xE0,0xE8])]
+    #[scan(press=[0xE0,0x68],release=[0xE0,0xE8])]
     KcMultiMediaWwwStop,
-    #[scan(down=[0xE0,0x69],up=[0xE0,0xE9])]
+    #[scan(press=[0xE0,0x69],release=[0xE0,0xE9])]
     KcMultiMediaWwwForward,
-    #[scan(down=[0xE0,0x6A],up=[0xE0,0xEA])]
+    #[scan(press=[0xE0,0x6A],release=[0xE0,0xEA])]
     KcMultiMediaWwwBack,
-    #[scan(down=[0xE0,0x6B],up=[0xE0,0xEB])]
+    #[scan(press=[0xE0,0x6B],release=[0xE0,0xEB])]
     KcMultiMediaMyComputer,
-    #[scan(down=[0xE0,0x6C],up=[0xE0,0xEC])]
+    #[scan(press=[0xE0,0x6C],release=[0xE0,0xEC])]
     KcMultiMediaEmail,
-    #[scan(down=[0xE0,0x6D],up=[0xE0,0xED])]
+    #[scan(press=[0xE0,0x6D],release=[0xE0,0xED])]
     KcMultiMediaMediaSelect,
-    #[scan(down=[0xE0,0x2A,0xE0,0x37],up=[0xE0,0xB7,0xE0,0xAA])]
+    #[scan(press=[0xE0,0x2A,0xE0,0x37],release=[0xE0,0xB7,0xE0,0xAA])]
     KcPrintScreen,
-    #[scan(down=[0xE1,0x1D,0x45,0xE1,0x9D,0xC5],up=[])]
+    #[scan(press=[0xE1,0x1D,0x45,0xE1,0x9D,0xC5],release=[])]
     KcPause,
 }

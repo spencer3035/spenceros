@@ -19,13 +19,19 @@ pub fn from_scancodes_impl(input: &DeriveInput) -> syn::Result<TokenStream> {
         for attr in field.attrs.iter() {
             if attr.path().is_ident(SCAN_ATTR) {
                 // Parse attribute
-                let attr: parse::ScanValues = attr.meta.require_list()?.parse_args()?;
+                let parse::ScanValues {
+                    press,
+                    release,
+                    ch_lower,
+                    ch_upper,
+                } = attr.meta.require_list()?.parse_args()?;
                 // Convert to helper struct
                 let item = parse::VariantInfo {
                     name: field.ident.clone(),
-                    down: attr.down,
-                    up: attr.up,
-                    ch: attr.ch,
+                    press,
+                    release,
+                    ch_lower,
+                    ch_upper,
                 };
 
                 items.push(item);
