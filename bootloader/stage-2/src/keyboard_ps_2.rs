@@ -1,47 +1,108 @@
 use core::arch::asm;
 
-use common::println_vbe;
 use proc_macros::FromScancodes;
 
-/// Waits for the next down keypress that is a displayable character
-pub fn wait_keypress() -> char {
-    loop {
-        if let Ok(kc) = get_next_keycode() {
-            // println_vbe!("{kc:?}");
-            if kc.is_down {
-                if let Some(ch) = kc.code.to_char() {
-                    return ch;
+#[derive(Default)]
+struct KeyboardDriver {
+    shift_held: u8,
+    ctrl_held: u8,
+    gui_held: u8,
+    alt_held: u8,
+}
+
+impl KeyboardDriver {
+    #[allow(dead_code)]
+    pub fn has_keypress(&self) -> bool {
+        has_scancode()
+    }
+
+    #[allow(dead_code)]
+    pub fn next_keypress(&mut self) -> KeyCode {
+        let mut kc = wait_key_event();
+        loop {
+            if let Some(modi) = kc.code.is_modifier() {
+                self.handle_modifier(modi, kc.is_down);
+            } else {
+                return kc.code;
+            }
+            kc = wait_key_event();
+        }
+    }
+
+    fn handle_modifier(&mut self, modifier: Modifier, is_down: bool) {
+        match modifier {
+            Modifier::Shift => {
+                if is_down {
+                    if self.shift_held > 0 {
+                        self.shift_held -= 1;
+                    }
+                } else {
+                    self.shift_held += 1;
                 }
             }
-        };
+            Modifier::Control => {
+                if is_down {
+                    if self.ctrl_held > 0 {
+                        self.ctrl_held -= 1;
+                    }
+                } else {
+                    self.ctrl_held += 1;
+                }
+            }
+            Modifier::Alt => {
+                if is_down {
+                    if self.alt_held > 0 {
+                        self.alt_held -= 1;
+                    }
+                } else {
+                    self.alt_held += 1;
+                }
+            }
+            Modifier::Gui => {
+                if is_down {
+                    if self.gui_held > 0 {
+                        self.gui_held -= 1;
+                    }
+                } else {
+                    self.gui_held += 1;
+                }
+            }
+        }
+    }
+}
+
+/// Waits until the next keyboard event and returns it
+#[allow(dead_code)]
+pub fn wait_key_event() -> KeyEvent {
+    loop {
+        if let Ok(val) = get_next_key_event() {
+            return val;
+        }
     }
 }
 
 #[derive(Debug)]
-struct KeyEvent {
-    code: KeyCode,
-    is_down: bool,
+pub struct KeyEvent {
+    pub code: KeyCode,
+    pub is_down: bool,
 }
 
 /// Gets the next keycode
-fn get_next_keycode() -> Result<KeyEvent, ()> {
+fn get_next_key_event() -> Result<KeyEvent, ()> {
     let code = next_scancode();
     let index = 0;
-    get_next_key_event(code, index)
+    get_next_key_event_impl(code, index)
 }
 
 /// Handles polling for new scancodes until they are mapped into a proper key event
-fn get_next_key_event(code: u8, index: u8) -> Result<KeyEvent, ()> {
+fn get_next_key_event_impl(code: u8, index: u8) -> Result<KeyEvent, ()> {
     if KeyCode::has_next(code, index) {
         let code = next_scancode();
-        get_next_key_event(code, index + 1)
+        get_next_key_event_impl(code, index + 1)
     } else {
         match keycode_from_index_and_code(code, index) {
             Some(val) => Ok(val),
-            None => {
-                println_vbe!("Didn't have mapping for code 0x{code:X} at depth {index}");
-                Err(())
-            }
+            None => Err(()),
         }
     }
 }
@@ -51,6 +112,7 @@ fn keycode_from_index_and_code(code: u8, index: u8) -> Option<KeyEvent> {
     Some(KeyEvent { code: kc, is_down })
 }
 
+/// Blocks until we can read another scancode
 fn next_scancode() -> u8 {
     while !has_scancode() {}
 
@@ -66,6 +128,7 @@ fn next_scancode() -> u8 {
     scancode
 }
 
+/// Checks if there is a pending scancode to be read, not blocking
 fn has_scancode() -> bool {
     let status: u8;
     unsafe {
@@ -88,9 +151,50 @@ pub trait FromScancodes: Sized {
     fn to_char(&self) -> Option<char>;
 }
 
+pub enum Modifier {
+    Shift,
+    Control,
+    Alt,
+    Gui,
+}
+
+impl KeyCode {
+    /// Returns the kind of modifer key it is (if it is one)
+    #[allow(dead_code)]
+    pub fn is_modifier(&self) -> Option<Modifier> {
+        if self.is_shift() {
+            Some(Modifier::Shift)
+        } else if self.is_ctrl() {
+            Some(Modifier::Control)
+        } else if self.is_alt() {
+            Some(Modifier::Alt)
+        } else if self.is_gui() {
+            Some(Modifier::Gui)
+        } else {
+            None
+        }
+    }
+    pub fn is_shift(&self) -> bool {
+        *self == KeyCode::KcLeftShift || *self == KeyCode::KcRightShift
+    }
+    pub fn is_ctrl(&self) -> bool {
+        *self == KeyCode::KcLeftControl || *self == KeyCode::KcRightCtrl
+    }
+    pub fn is_alt(&self) -> bool {
+        *self == KeyCode::KcLeftAlt || *self == KeyCode::KcRightAlt
+    }
+    #[allow(dead_code)]
+    pub fn is_enter(&self) -> bool {
+        *self == KeyCode::KcEnter || *self == KeyCode::KcKpEnter
+    }
+    pub fn is_gui(&self) -> bool {
+        *self == KeyCode::KcLeftGui || *self == KeyCode::KcRightGui
+    }
+}
+
 /// Possible keys that can be pressed
-#[derive(FromScancodes, Debug)]
-enum KeyCode {
+#[derive(FromScancodes, Debug, PartialEq, Eq)]
+pub enum KeyCode {
     /// Escape
     #[scan(down=[0x01],up=[0x81])]
     KcEsc,
@@ -200,8 +304,9 @@ enum KeyCode {
     KcForwardSlash,
     #[scan(down=[0x36],up=[0xB6])]
     KcRightShift,
-    #[scan(down=[0x37],up=[0xB7],ch='*')]
-    KcKpAst,
+    // TODO: I use this to test error handling, uncomment when done
+    // #[scan(down=[0x37],up=[0xB7],ch='*')]
+    // KcKpAst,
     #[scan(down=[0x38],up=[0xB8])]
     KcLeftAlt,
     #[scan(down=[0x39],up=[0xB9],ch=' ')]

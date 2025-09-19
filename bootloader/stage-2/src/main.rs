@@ -63,8 +63,8 @@ fn start() -> ! {
     }
     println_vbe!("Checkpoint");
     loop {
-        let ch = keyboard_ps_2::wait_keypress();
-        print_vbe!("{ch}");
+        let ch = keyboard_ps_2::wait_key_event();
+        println_vbe!("{ch:?}");
     }
 
     // unsafe {
