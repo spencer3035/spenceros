@@ -3,7 +3,55 @@ use core::arch::asm;
 use common::println_vbe;
 use proc_macros::FromScancodes;
 
-pub fn next_scancode() -> u8 {
+/// Waits for the next down keypress that is a displayable character
+pub fn wait_keypress() -> char {
+    loop {
+        if let Ok(kc) = get_next_keycode() {
+            // println_vbe!("{kc:?}");
+            if kc.is_down {
+                if let Some(ch) = kc.code.to_char() {
+                    return ch;
+                }
+            }
+        };
+    }
+}
+
+#[derive(Debug)]
+struct KeyEvent {
+    code: KeyCode,
+    is_down: bool,
+}
+
+/// Gets the next keycode
+fn get_next_keycode() -> Result<KeyEvent, ()> {
+    let code = next_scancode();
+    let index = 0;
+    get_next_key_event(code, index)
+}
+
+/// Handles polling for new scancodes until they are mapped into a proper key event
+fn get_next_key_event(code: u8, index: u8) -> Result<KeyEvent, ()> {
+    if KeyCode::has_next(code, index) {
+        let code = next_scancode();
+        get_next_key_event(code, index + 1)
+    } else {
+        match keycode_from_index_and_code(code, index) {
+            Some(val) => Ok(val),
+            None => {
+                println_vbe!("Didn't have mapping for code 0x{code:X} at depth {index}");
+                Err(())
+            }
+        }
+    }
+}
+
+fn keycode_from_index_and_code(code: u8, index: u8) -> Option<KeyEvent> {
+    let (kc, is_down) = KeyCode::from_scancode_and_depth(code, index)?;
+    Some(KeyEvent { code: kc, is_down })
+}
+
+fn next_scancode() -> u8 {
     while !has_scancode() {}
 
     let mut scancode: u8;
@@ -18,7 +66,7 @@ pub fn next_scancode() -> u8 {
     scancode
 }
 
-pub fn has_scancode() -> bool {
+fn has_scancode() -> bool {
     let status: u8;
     unsafe {
         // Reads from the PS/2 controller status register
@@ -30,68 +78,17 @@ pub fn has_scancode() -> bool {
     status & 1 != 0
 }
 
-#[derive(Debug)]
-struct KeyEvent {
-    code: KeyCode,
-    is_down: bool,
-}
-
-fn wait_keycode() -> Option<KeyEvent> {
-    get_next_keycode().ok()
-}
-
-pub fn wait_keypress() -> char {
-    loop {
-        let Some(kc) = wait_keycode() else {
-            return '?';
-        };
-
-        println_vbe!("{kc:?}");
-
-        if !kc.is_down {
-            return kc.code.to_char().unwrap_or('?');
-        }
-    }
-}
-
-fn get_next_keycode() -> Result<KeyEvent, ()> {
-    let code = next_scancode();
-    let index = 0;
-    get_next_keycode_impl(code, index)
-}
-
-fn get_next_keycode_impl(code: u8, index: u8) -> Result<KeyEvent, ()> {
-    if has_next_scancode(code, index) {
-        let code = next_scancode();
-        get_next_keycode_impl(code, index + 1)
-    } else {
-        match keycode_from_index_and_code(code, index) {
-            Some(val) => Ok(val),
-            None => {
-                println_vbe!("Didn't have mapping for code 0x{code:X} at depth {index}");
-                Err(())
-            }
-        }
-    }
-}
-
-fn has_next_scancode(code: u8, index: u8) -> bool {
-    KeyCode::has_next(code, index)
-}
-
-fn keycode_from_index_and_code(code: u8, index: u8) -> Option<KeyEvent> {
-    // keycode_from_index_and_code_impl(code, index)
-    let (kc, is_down) = KeyCode::from_scancode_and_depth(code, index)?;
-    Some(KeyEvent { code: kc, is_down })
-}
-
 pub trait FromScancodes: Sized {
+    /// If the current code and index is terminal, assuming that all previous vales were terminal
     fn has_next(code: u8, index: u8) -> bool;
+    /// Gets the scancode given the terminal code and the number of codes, as well as if it is a
+    /// down press or not (_, true) is downpress, (_, false) is a release.
     fn from_scancode_and_depth(code: u8, index: u8) -> Option<(Self, bool)>;
+    /// Tries to conver the key to a character
     fn to_char(&self) -> Option<char>;
 }
 
-/// Doc comment
+/// Possible keys that can be pressed
 #[derive(FromScancodes, Debug)]
 enum KeyCode {
     /// Escape
@@ -203,7 +200,7 @@ enum KeyCode {
     KcForwardSlash,
     #[scan(down=[0x36],up=[0xB6])]
     KcRightShift,
-    #[scan(down=[0x37],up=[0xB7])]
+    #[scan(down=[0x37],up=[0xB7],ch='*')]
     KcKpAst,
     #[scan(down=[0x38],up=[0xB8])]
     KcLeftAlt,

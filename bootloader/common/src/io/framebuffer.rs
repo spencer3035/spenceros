@@ -26,7 +26,7 @@ macro_rules! print_vbe {
     ($($args:tt)*) => {
         if $crate::io::framebuffer::VbeDisplay::is_init() {
             use core::fmt::Write as _;
-            if let Err(e) = writeln!($crate::io::framebuffer::VbeDisplay, $($args)*) {
+            if let Err(e) = write!($crate::io::framebuffer::VbeDisplay, $($args)*) {
                 // Fall back on bios printing. We want to avoid potential double panics
                 panic!("write error : {e}");
             }

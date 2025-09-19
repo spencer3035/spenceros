@@ -45,7 +45,7 @@ fn main(_disk_number: u16) {
         panic!("CPUID not present");
     }
 
-    prompt_continue();
+    // prompt_continue();
     init_graphical();
 
     // Safety: This is the only mutable reference.
