@@ -11,7 +11,7 @@ llvm-tools = "0.1.1"
 
 [workspace]
 members = [ 
-  "bootloader/common", 
+  "bootloader/common", "bootloader/proc_macros", 
   "bootloader/stage-0", 
   "bootloader/stage-1",
   "bootloader/stage-2",

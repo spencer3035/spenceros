@@ -1,13 +1,15 @@
 use core::arch::asm;
 
 use common::println_vbe;
+use proc_macros::define_keycodes;
 
-pub fn wait_scancode() -> u8 {
-    while !has_keypres() {}
+pub fn next_scancode() -> u8 {
+    while !has_scancode() {}
 
     let mut scancode: u8;
     unsafe {
         asm!(
+            // Reads from the data register to get scancode
             "in al, 0x60",
              out("al") scancode,
         );
@@ -16,33 +18,7 @@ pub fn wait_scancode() -> u8 {
     scancode
 }
 
-pub fn wait_keypress() -> char {
-    let mut scancode = wait_scancode();
-    // If the keypress is down/press or up/release
-    if scancode == 0xE0 {
-        // Get next scancode
-        scancode = wait_scancode();
-        // TODO: handle is_down here too. Try to clean up logic a bit
-        return KeyCode::from_scancode_e0(scancode)
-            .and_then(|kc| {
-                println_vbe!("E0 {kc:?}");
-                kc.to_char()
-            })
-            .unwrap_or('_');
-    }
-    let is_down = scancode & 0b1000_0000 == 0;
-    if !is_down {
-        // This is a key release, not a press
-        wait_keypress()
-    } else if let Some(kc) = KeyCode::from_scancode_1(scancode) {
-        println_vbe!("{kc:?}");
-        kc.to_char().unwrap_or('_')
-    } else {
-        '?'
-    }
-}
-
-pub fn has_keypres() -> bool {
+pub fn has_scancode() -> bool {
     let status: u8;
     unsafe {
         // Reads from the PS/2 controller status register
@@ -54,168 +30,276 @@ pub fn has_keypres() -> bool {
     status & 1 != 0
 }
 
+#[derive(Debug)]
+struct KeyEvent {
+    code: KeyCode,
+    is_down: bool,
+}
+
+fn wait_keycode() -> Option<KeyEvent> {
+    get_next_keycode().ok()
+}
+
+pub fn wait_keypress() -> char {
+    loop {
+        let Some(kc) = wait_keycode() else {
+            return '?';
+        };
+
+        if !kc.is_down {
+            return kc.code.to_char().unwrap_or('?');
+        }
+    }
+}
+
+fn get_next_keycode() -> Result<KeyEvent, ()> {
+    let code = next_scancode();
+    let index = 0;
+    get_next_keycode_impl(code, index)
+}
+
+fn get_next_keycode_impl(code: u8, index: u8) -> Result<KeyEvent, ()> {
+    if has_next_scancode(code, index) {
+        let code = next_scancode();
+        get_next_keycode_impl(code, index + 1)
+    } else {
+        match keycode_from_index_and_code(code, index) {
+            Some(val) => Ok(val),
+            None => {
+                println_vbe!("Didn't have mapping for code 0x{code:X} at depth {index}");
+                Err(())
+            }
+        }
+    }
+}
+
+fn has_next_scancode(code: u8, index: u8) -> bool {
+    // has_next_scancode_impl(code, index)
+    KeyCode::has_next(code, index)
+}
+
+fn keycode_from_index_and_code(code: u8, index: u8) -> Option<KeyEvent> {
+    // keycode_from_index_and_code_impl(code, index)
+    KeyCode::get_event(code, index)
+}
+
 macro_rules! def_keycodes {
     (
-        $( ($code:literal, $name:ident, $char:tt )  ),* ,
-        $( {0xE0, $code_e0:literal, $name_e0:ident, $char_e0:tt }  ),* $(,)?
+        $(
+            ([$($code:literal),*], $name:ident, $dir:tt, $char:tt)
+        ),*
+    $(,)?
     ) => {
+        fn has_next_scancode_impl(code: u8, index: u8) -> bool {
+            false
+            $(
+                 // || ((count!($($code)*)) - 1 == index && code == last!($($code)*))
+                 || ((count!($($code)*)) - 1 == index && code == last!($($code)*))
+            )*
+        }
+        fn keycode_from_index_and_code_impl(code: u8, index: u8) -> Option<KeyEvent> {
+            if false {
+                None
+            }
+            $(
+            else if ((count!($($code)*)) - 1 == index && code == last!($($code)*)) {
+                Some(
+                    KeyEvent {
+                        code : KeyCode::$name,
+                        is_down: def_keycodes!(@dir $dir)
+                    })
+            }
+            )*
+            else {
+                None
+            }
+        }
+
         #[derive(Debug)]
         enum KeyCode {
             $($name ,)*
-            $($name_e0 ,)*
         }
         impl KeyCode {
-            fn from_scancode_1(code: u8) -> Option<Self> {
-                match code & 0b0111_1111 {
-                    $($code => Some(KeyCode::$name),)*
-                    _ => None,
-                }
-            }
-
-            fn from_scancode_e0(code: u8) -> Option<Self> {
-                match code & 0b0111_1111 {
-                    $($code_e0 => Some(KeyCode::$name_e0),)*
-                    _ => None,
-                }
-            }
-
             fn to_char(&self) -> Option<char> {
                 match self {
                     $(KeyCode::$name => def_keycodes!(@to_char $char),)*
-                    $(KeyCode::$name_e0 => def_keycodes!(@to_char $char_e0),)*
                 }
             }
         }
     };
-    ( @to_char $ch:literal ) => { Some($ch) };
-    ( @to_char None ) => { None };
+    (@matches $index:ident $code:ident $([$($first:literal, $rest:literal),*]),*) => {
+        false $(
+            ||
+            )*
+    };
+    (@dir Down) => {true};
+    (@dir Up) => {false};
+    ( @to_char $ch:literal ) => {
+        Some($ch)
+    };
+    ( @to_char None ) => {
+        None
+    };
 }
+
+macro_rules! count {
+    () => (0u8);
+    ($x:tt $($xs:tt)* ) => (1u8 + count!($($xs)*));
+}
+
+macro_rules! last {
+    ($x:tt) => {
+        $x
+    };
+    ($x:tt $($xs:tt)* ) => {
+        last!($($xs)*)
+    };
+}
+
+macro_rules! second_last_eq {
+    () => { false };
+    ($x:tt) => { false };
+    ($val:literal, $x:tt $y:tt) => { $val == $x };
+    ($val:literal, $x:tt $($xs:tt)* ) => {
+        last!($val, $($xs)*)
+    };
+}
+
+// def_keycodes!(
+//     ([0x01], Kc1, Down, '2'),
+//     ([0x02], Kc2, Down, '2'),
+//     ([0x11], Kc1, Up, '1'),
+//     ([0x12], Kc2, Up, '2'),
+//     ([0xE0, 0x01], KcUp, Up, None),
+//     ([0xE0, 0x11], KcUp, Down, None),
+// );
 
 // ( $code:literal, $name:ident, $char:literal) => {};
 // ( @inner $code:literal, $name:ident) => {};
 
-def_keycodes!(
+// def_keycodes!(
+define_keycodes!(
     // Regular keycodes
-    (0x01, KcEsc, None),
-    (0x02, Kc1, '1'),
-    (0x03, Kc2, '2'),
-    (0x04, Kc3, '3'),
-    (0x05, Kc4, '4'),
-    (0x06, Kc5, '5'),
-    (0x07, Kc6, '6'),
-    (0x08, Kc7, '7'),
-    (0x09, Kc8, '8'),
-    (0x0A, Kc9, '9'),
-    (0x0B, Kc0, '0'),
-    (0x0C, KcMinus, '-'),
-    (0x0D, KcEquals, '='),
-    (0x0E, KcBackspace, None),
-    (0x0F, KcTab, None),
-    (0x10, KcQ, 'Q'),
-    (0x11, KcW, 'W'),
-    (0x12, KcE, 'E'),
-    (0x13, KcR, 'R'),
-    (0x14, KcT, 'T'),
-    (0x15, KcY, 'Y'),
-    (0x16, KcU, 'U'),
-    (0x17, KcI, 'I'),
-    (0x18, KcO, 'O'),
-    (0x19, KcP, 'P'),
-    (0x1A, KcOpenSquare, '['),
-    (0x1B, KcCloseSquare, ']'),
-    (0x1C, KcEnter, None),
-    (0x1D, KcLeftControl, None),
-    (0x1E, KcA, 'A'),
-    (0x1F, KcS, 'S'),
-    (0x20, KcD, 'D'),
-    (0x21, KcF, 'F'),
-    (0x22, KcG, 'G'),
-    (0x23, KcH, 'H'),
-    (0x24, KcJ, 'J'),
-    (0x25, KcK, 'K'),
-    (0x26, KcL, 'L'),
-    (0x27, KcSemiColon, ';'),
-    (0x28, KcSingleQuote, '\''),
-    (0x29, KcTick, '`'),
-    (0x2A, KcLeftShift, None),
-    (0x2B, KcBackSlash, '\\'),
-    (0x2C, KcZ, 'Z'),
-    (0x2D, KcX, 'X'),
-    (0x2E, KcC, 'C'),
-    (0x2F, KcV, 'V'),
-    (0x30, KcB, 'B'),
-    (0x31, KcN, 'N'),
-    (0x32, KcM, 'M'),
-    (0x33, KcComma, ','),
-    (0x34, KcPeriod, '.'),
-    (0x35, KcForwardSlash, '/'),
-    (0x36, KcRightShift, None),
-    (0x37, KcKpAst, '*'),
-    (0x38, KcLeftAlt, None),
-    (0x39, KcSpace, None),
-    (0x3A, KcCapsLock, None),
-    (0x3B, KcF1, None),
-    (0x3C, KcF2, None),
-    (0x3D, KcF3, None),
-    (0x3E, KcF4, None),
-    (0x3F, KcF5, None),
-    (0x40, KcF6, None),
-    (0x41, KcF7, None),
-    (0x42, KcF8, None),
-    (0x43, KcF9, None),
-    (0x44, KcF10, None),
-    (0x45, KcNumberLock, None),
-    (0x46, KcScrollLock, None),
-    (0x47, KcNp7, '7'),
-    (0x48, KcNp8, '8'),
-    (0x49, KcNp9, '9'),
-    (0x4A, KcNpMinus, '-'),
-    (0x4B, KcNp4, '4'),
-    (0x4C, KcNp5, '5'),
-    (0x4D, KcNp6, '6'),
-    (0x4E, KcNpPlus, '+'),
-    (0x4F, KcNp1, '1'),
-    (0x50, KcNp2, '2'),
-    (0x51, KcNp3, '3'),
-    (0x52, KcNp0, '0'),
-    (0x53, KcNpPeriod, '.'),
-    (0x57, KcF11, None),
-    (0x58, KcF12, None),
+    ([0x01], KcEsc, Up, None),
+    ([0x02], Kc1, Up, '1'),
+    ([0x03], Kc2, Up, '2'),
+    ([0x04], Kc3, Up, '3'),
+    ([0x05], Kc4, Up, '4'),
+    ([0x06], Kc5, Up, '5'),
+    ([0x07], Kc6, Up, '6'),
+    ([0x08], Kc7, Up, '7'),
+    ([0x09], Kc8, Up, '8'),
+    ([0x0A], Kc9, Up, '9'),
+    ([0x0B], Kc0, Up, '0'),
+    ([0x0C], KcMinus, Up, '-'),
+    ([0x0D], KcEquals, Up, '='),
+    ([0x0E], KcBackspace, Up, None),
+    ([0x0F], KcTab, Up, None),
+    ([0x10], KcQ, Up, 'Q'),
+    ([0x11], KcW, Up, 'W'),
+    ([0x12], KcE, Up, 'E'),
+    ([0x13], KcR, Up, 'R'),
+    ([0x14], KcT, Up, 'T'),
+    ([0x15], KcY, Up, 'Y'),
+    ([0x16], KcU, Up, 'U'),
+    ([0x17], KcI, Up, 'I'),
+    ([0x18], KcO, Up, 'O'),
+    ([0x19], KcP, Up, 'P'),
+    ([0x1A], KcOpenSquare, Up, '['),
+    ([0x1B], KcCloseSquare, Up, ']'),
+    ([0x1C], KcEnter, Up, None),
+    ([0x1D], KcLeftControl, Up, None),
+    ([0x1E], KcA, Up, 'A'),
+    ([0x1F], KcS, Up, 'S'),
+    ([0x20], KcD, Up, 'D'),
+    ([0x21], KcF, Up, 'F'),
+    ([0x22], KcG, Up, 'G'),
+    ([0x23], KcH, Up, 'H'),
+    ([0x24], KcJ, Up, 'J'),
+    ([0x25], KcK, Up, 'K'),
+    ([0x26], KcL, Up, 'L'),
+    ([0x27], KcSemiColon, Up, ';'),
+    ([0x28], KcSingleQuote, Up, '\''),
+    ([0x29], KcTick, Up, '`'),
+    ([0x2A], KcLeftShift, Up, None),
+    ([0x2B], KcBackSlash, Up, '\\'),
+    ([0x2C], KcZ, Up, 'Z'),
+    ([0x2D], KcX, Up, 'X'),
+    ([0x2E], KcC, Up, 'C'),
+    ([0x2F], KcV, Up, 'V'),
+    ([0x30], KcB, Up, 'B'),
+    ([0x31], KcN, Up, 'N'),
+    ([0x32], KcM, Up, 'M'),
+    ([0x33], KcComma, Up, ','),
+    ([0x34], KcPeriod, Up, '.'),
+    ([0x35], KcForwardSlash, Up, '/'),
+    ([0x36], KcRightShift, Up, None),
+    ([0x37], KcKpAst, Up, '*'),
+    ([0x38], KcLeftAlt, Up, None),
+    ([0x39], KcSpace, Up, None),
+    ([0x3A], KcCapsLock, Up, None),
+    ([0x3B], KcF1, Up, None),
+    ([0x3C], KcF2, Up, None),
+    ([0x3D], KcF3, Up, None),
+    ([0x3E], KcF4, Up, None),
+    ([0x3F], KcF5, Up, None),
+    ([0x40], KcF6, Up, None),
+    ([0x41], KcF7, Up, None),
+    ([0x42], KcF8, Up, None),
+    ([0x43], KcF9, Up, None),
+    ([0x44], KcF10, Up, None),
+    ([0x45], KcNumberLock, Up, None),
+    ([0x46], KcScrollLock, Up, None),
+    ([0x47], KcNp7, Up, '7'),
+    ([0x48], KcNp8, Up, '8'),
+    ([0x49], KcNp9, Up, '9'),
+    ([0x4A], KcNpMinus, Up, '-'),
+    ([0x4B], KcNp4, Up, '4'),
+    ([0x4C], KcNp5, Up, '5'),
+    ([0x4D], KcNp6, Up, '6'),
+    ([0x4E], KcNpPlus, Up, '+'),
+    ([0x4F], KcNp1, Up, '1'),
+    ([0x50], KcNp2, Up, '2'),
+    ([0x51], KcNp3, Up, '3'),
+    ([0x52], KcNp0, Up, '0'),
+    ([0x53], KcNpPeriod, Up, '.'),
+    ([0x57], KcF11, Up, None),
+    ([0x58], KcF12, Up, None),
     // Tuple keycodes
-    {0xE0, 0x10, KcMultiMediaTrackPrevious, None},
-    {0xE0, 0x19, KcMultiMediaTrackNext, None},
-    {0xE0, 0x1C, KcKpEnter, None},
-    {0xE0, 0x1D, KcRightCtrl, None},
-    {0xE0, 0x20, KcMultiMediaMute, None},
-    {0xE0, 0x21, KcMultiMediaCalculator, None},
-    {0xE0, 0x22, KcMultiMediaPlay, None},
-    {0xE0, 0x24, KcMultiMediaStop, None},
-    {0xE0, 0x2E, KcMultiMediaVolumeDown, None},
-    {0xE0, 0x30, KcMultiMediaVolumeUp, None},
-    {0xE0, 0x32, KcMultiMediaWwwHome, None},
-    {0xE0, 0x35, KcKpForwardSlash, '/'},
-    {0xE0, 0x38, KcRightAlt, None},
-    {0xE0, 0x47, KcHome, None},
-    {0xE0, 0x48, KcUp, None},
-    {0xE0, 0x49, KcPageUp, None},
-    {0xE0, 0x4B, KcLeft, None},
-    {0xE0, 0x4D, KcRight, None},
-    {0xE0, 0x4F, KcEnd, None},
-    {0xE0, 0x50, KcDown, None},
-    {0xE0, 0x51, KcPageDown, None},
-    {0xE0, 0x52, KcInsert, None},
-    {0xE0, 0x53, KcDelete, None},
-    {0xE0, 0x5B, KcLeftGui, None},
-    {0xE0, 0x5C, KcRightGui, None},
-    {0xE0, 0x5D, KcApps, None},
-    {0xE0, 0x5E, KcAcpiPower, None},
-    {0xE0, 0x5F, KcAcpiSleep, None},
-    {0xE0, 0x63, KcAcpiWake, None},
-    {0xE0, 0x65, KcMultiMediaWwwSearch, None},
-    {0xE0, 0x66, KcMultiMediaWwwFavorites, None},
-    {0xE0, 0x67, KcMultiMediaWwwRefresh, None},
-    {0xE0, 0x68, KcMultiMediaWwwStop, None},
-    {0xE0, 0x69, KcMultiMediaWwwForward, None},
-    {0xE0, 0x6A, KcMultiMediaWwwBack, None},
-    {0xE0, 0x6B, KcMultiMediaMyComputer, None},
+    ([0xE0, 0x10], KcMultiMediaTrackPrevious, Up, None),
+    ([0xE0, 0x19], KcMultiMediaTrackNext, Up, None),
+    ([0xE0, 0x1C], KcKpEnter, Up, None),
+    ([0xE0, 0x1D], KcRightCtrl, Up, None),
+    ([0xE0, 0x20], KcMultiMediaMute, Up, None),
+    ([0xE0, 0x21], KcMultiMediaCalculator, Up, None),
+    ([0xE0, 0x22], KcMultiMediaPlay, Up, None),
+    ([0xE0, 0x24], KcMultiMediaStop, Up, None),
+    ([0xE0, 0x2E], KcMultiMediaVolumeDown, Up, None),
+    ([0xE0, 0x30], KcMultiMediaVolumeUp, Up, None),
+    ([0xE0, 0x32], KcMultiMediaWwwHome, Up, None),
+    ([0xE0, 0x35], KcKpForwardSlash, Up, '/'),
+    ([0xE0, 0x38], KcRightAlt, Up, None),
+    ([0xE0, 0x47], KcHome, Up, None),
+    ([0xE0, 0x48], KcUp, Up, None),
+    ([0xE0, 0x49], KcPageUp, Up, None),
+    ([0xE0, 0x4B], KcLeft, Up, None),
+    ([0xE0, 0x4D], KcRight, Up, None),
+    ([0xE0, 0x4F], KcEnd, Up, None),
+    ([0xE0, 0x50], KcDown, Up, None),
+    ([0xE0, 0x51], KcPageDown, Up, None),
+    ([0xE0, 0x52], KcInsert, Up, None),
+    ([0xE0, 0x53], KcDelete, Up, None),
+    ([0xE0, 0x5B], KcLeftGui, Up, None),
+    ([0xE0, 0x5C], KcRightGui, Up, None),
+    ([0xE0, 0x5D], KcApps, Up, None),
+    ([0xE0, 0x5E], KcAcpiPower, Up, None),
+    ([0xE0, 0x5F], KcAcpiSleep, Up, None),
+    ([0xE0, 0x63], KcAcpiWake, Up, None),
+    ([0xE0, 0x65], KcMultiMediaWwwSearch, Up, None),
+    ([0xE0, 0x66], KcMultiMediaWwwFavorites, Up, None),
+    ([0xE0, 0x67], KcMultiMediaWwwRefresh, Up, None),
+    ([0xE0, 0x68], KcMultiMediaWwwStop, Up, None),
+    ([0xE0, 0x69], KcMultiMediaWwwForward, Up, None),
+    ([0xE0, 0x6A], KcMultiMediaWwwBack, Up, None),
+    ([0xE0, 0x6B], KcMultiMediaMyComputer, Up, None),
 );
