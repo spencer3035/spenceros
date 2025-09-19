@@ -7,7 +7,9 @@ use std::collections::BTreeMap;
 use proc_macro2::TokenStream;
 
 pub fn generate_enum(def: &KeyCodeDef) -> TokenStream {
-    let names = def.key_codes.iter().map(|kc| &kc.name);
+    let mut names: Vec<_> = def.key_codes.iter().map(|kc| &kc.name).collect();
+    names.sort();
+    names.dedup();
     quote! {
         #[derive(Debug)]
         enum KeyCode {
