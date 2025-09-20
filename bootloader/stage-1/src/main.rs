@@ -39,6 +39,7 @@ fn init_static_values() {
 fn main(_disk_number: u16) {
     println_bios!("Starting stage 1");
     enable_a20();
+    hint_bios_long_mode();
     init_static_values();
 
     if !has_cpuid() {

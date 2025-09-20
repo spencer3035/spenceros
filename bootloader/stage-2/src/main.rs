@@ -8,6 +8,8 @@ use common::print_vbe;
 use common::println_vbe;
 use core::arch::asm;
 
+use crate::keyboard_ps_2::KeyboardDriver;
+
 #[allow(unused)]
 static GDT_LONG: Gdt = Gdt::long_mode();
 
@@ -62,9 +64,10 @@ fn start() -> ! {
         panic!("No long mode!");
     }
     println_vbe!("Checkpoint");
+    let mut keyboard = KeyboardDriver::new();
     loop {
-        let ch = keyboard_ps_2::wait_key_event();
-        println_vbe!("{ch:?}");
+        let ch = keyboard.next_char();
+        print_vbe!("{ch}");
     }
 
     // unsafe {

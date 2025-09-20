@@ -3,7 +3,7 @@ use core::arch::asm;
 use proc_macros::FromScancodes;
 
 #[derive(Default)]
-struct KeyboardDriver {
+pub struct KeyboardDriver {
     shift_held: u8,
     ctrl_held: u8,
     gui_held: u8,
@@ -11,9 +11,28 @@ struct KeyboardDriver {
 }
 
 impl KeyboardDriver {
+    pub fn new() -> Self {
+        Self::default()
+    }
     #[allow(dead_code)]
     pub fn has_keypress(&self) -> bool {
         has_scancode()
+    }
+
+    pub fn next_char(&mut self) -> char {
+        loop {
+            let kc = self.next_keypress();
+            let maybe_char = kc.to_char_upper();
+            // let maybe_char = if self.shift_held > 0 {
+            //     kc.to_char_upper()
+            // } else {
+            //     kc.to_char_lower()
+            // };
+
+            if let Some(ch) = maybe_char {
+                return ch;
+            }
+        }
     }
 
     #[allow(dead_code)]
@@ -21,8 +40,8 @@ impl KeyboardDriver {
         let mut kc = wait_key_event();
         loop {
             if let Some(modi) = kc.code.is_modifier() {
-                self.handle_modifier(modi, kc.is_down);
-            } else {
+                self.handle_modifier(modi, kc.is_press);
+            } else if kc.is_press {
                 return kc.code;
             }
             kc = wait_key_event();
@@ -84,7 +103,7 @@ pub fn wait_key_event() -> KeyEvent {
 #[derive(Debug)]
 pub struct KeyEvent {
     pub code: KeyCode,
-    pub is_down: bool,
+    pub is_press: bool,
 }
 
 /// Gets the next keycode
@@ -109,7 +128,10 @@ fn get_next_key_event_impl(code: u8, index: u8) -> Result<KeyEvent, ()> {
 
 fn keycode_from_index_and_code(code: u8, index: u8) -> Option<KeyEvent> {
     let (kc, is_down) = KeyCode::from_scancode_and_depth(code, index)?;
-    Some(KeyEvent { code: kc, is_down })
+    Some(KeyEvent {
+        code: kc,
+        is_press: is_down,
+    })
 }
 
 /// Blocks until we can read another scancode
@@ -252,7 +274,7 @@ pub enum KeyCode {
     KcOpenSquare,
     #[scan(press=[0x1B],release=[0x9B],lower=']',upper='}')]
     KcCloseSquare,
-    #[scan(press=[0x1C],release=[0x9C])]
+    #[scan(press=[0x1C],release=[0x9C],lower='\n',upper='\n')]
     KcEnter,
     #[scan(press=[0x1D],release=[0x9D])]
     KcLeftControl,
@@ -373,7 +395,7 @@ pub enum KeyCode {
     KcMultiMediaTrackPrevious,
     #[scan(press=[0xE0,0x19],release=[0xE0,0x99])]
     KcMultiMediaTrackNext,
-    #[scan(press=[0xE0,0x1C],release=[0xE0,0x9C])]
+    #[scan(press=[0xE0,0x1C],release=[0xE0,0x9C],lower='\n',upper='\n')]
     KcKpEnter,
     #[scan(press=[0xE0,0x1D],release=[0xE0,0x9D])]
     KcRightCtrl,

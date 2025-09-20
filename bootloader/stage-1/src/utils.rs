@@ -45,6 +45,23 @@ pub fn prompt_continue() {
     }
 }
 
+/// This tells the bios that we are targeting long mode (64 bit) as our primary mode of operation.
+/// Has no other side effects
+pub fn hint_bios_long_mode() {
+    // This is a pretty poorly document INT
+    // See: https://f.osdev.org/viewtopic.php?f=1&t=20445&start=0
+    unsafe {
+        asm!(
+            // Which variant of int0x15
+            "mov ax, 0xec00",
+            // 2 is long mode
+            "mov bl, 0x02",
+            // Do INT
+            "int 0x15"
+        );
+    }
+}
+
 /// Check if A20 is enabled
 pub fn enable_a20() {
     // enable A20-Line via IO-Port 92, might not work on all motherboards
