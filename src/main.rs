@@ -43,14 +43,11 @@ fn assert_sizes() {
         SECTORS_TO_READ + 1,
         "Total sectors did not match expected"
     );
-    assert!(
-        total_sectors <= u8::MAX as usize,
-        "too many sectors to read with one u8"
-    );
 }
 
 fn main() {
     assert_sizes();
+
     // Put all sections together
     let disk_bytes: Vec<u8> = BOOT_0
         .iter()

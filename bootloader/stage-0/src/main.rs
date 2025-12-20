@@ -76,6 +76,7 @@ fn check_int13(drive_num: u16) {
 }
 
 fn load_sectors(drive_number: u16) {
+    // This is tested it can read up to 0x80 sectors (which is expected)
     let mut num_sectors: u8 = common::config::SECTORS_TO_READ as u8;
     let requested_sectors = num_sectors;
     let to_address: u16 = 0x7e00;

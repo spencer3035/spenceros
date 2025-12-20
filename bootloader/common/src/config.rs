@@ -227,9 +227,9 @@ mod test {
 
     #[test]
     fn test_real_mode_limitations() {
-        // Assembly call is limited to u8::MAX sectors it can read.
+        // Assembly call is limited to (u8::MAX + 1) / 2 sectors it can read. It uses the lower half of a register
         assert!(
-            SECTORS_TO_READ <= (u8::MAX) as usize,
+            SECTORS_TO_READ <= (u8::MAX as usize + 1) / 2,
             "can't read 0x{:X} sectors",
             SECTORS_TO_READ
         );
