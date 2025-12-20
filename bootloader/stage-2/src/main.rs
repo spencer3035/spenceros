@@ -1,6 +1,5 @@
 #![no_std]
 #![no_main]
-#![recursion_limit = "512"]
 
 //! This staged is entered when we have set up protected mode. It's purpose is to set up and enter
 //! long mode and pass to the next stage
@@ -66,7 +65,6 @@ fn start() -> ! {
     if !has_long_mode() {
         panic!("No long mode!");
     }
-    println_vbe!("Checkpoint");
     // let mut keyboard = KeyboardDriver::new();
     // loop {
     //     let ch = keyboard.next_char();
@@ -77,6 +75,9 @@ fn start() -> ! {
         println!("Setting up paging");
         load_page_tables();
     }
+    // There is currently something wrong with setting up long mode
+    println!("Stoping before stage 3");
+    loop {}
     enter_stage_3();
     panic!("stage 3 returned");
 }
