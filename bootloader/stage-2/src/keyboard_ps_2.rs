@@ -4,10 +4,10 @@ use proc_macros::FromScancodes;
 
 #[derive(Default)]
 pub struct KeyboardDriver {
-    shift_held: u8,
-    ctrl_held: u8,
-    gui_held: u8,
-    alt_held: u8,
+    shift_held: bool,
+    ctrl_held: bool,
+    gui_held: bool,
+    alt_held: bool,
 }
 
 impl KeyboardDriver {
@@ -22,12 +22,12 @@ impl KeyboardDriver {
     pub fn next_char(&mut self) -> char {
         loop {
             let kc = self.next_keypress();
-            let maybe_char = kc.to_char_upper();
-            // let maybe_char = if self.shift_held > 0 {
-            //     kc.to_char_upper()
-            // } else {
-            //     kc.to_char_lower()
-            // };
+            // let maybe_char = kc.to_char_upper();
+            let maybe_char = if self.shift_held {
+                kc.to_char_upper()
+            } else {
+                kc.to_char_lower()
+            };
 
             if let Some(ch) = maybe_char {
                 return ch;
@@ -51,40 +51,16 @@ impl KeyboardDriver {
     fn handle_modifier(&mut self, modifier: Modifier, is_down: bool) {
         match modifier {
             Modifier::Shift => {
-                if is_down {
-                    if self.shift_held > 0 {
-                        self.shift_held -= 1;
-                    }
-                } else {
-                    self.shift_held += 1;
-                }
+                self.shift_held = is_down;
             }
             Modifier::Control => {
-                if is_down {
-                    if self.ctrl_held > 0 {
-                        self.ctrl_held -= 1;
-                    }
-                } else {
-                    self.ctrl_held += 1;
-                }
+                self.ctrl_held = is_down;
             }
             Modifier::Alt => {
-                if is_down {
-                    if self.alt_held > 0 {
-                        self.alt_held -= 1;
-                    }
-                } else {
-                    self.alt_held += 1;
-                }
+                self.alt_held = is_down;
             }
             Modifier::Gui => {
-                if is_down {
-                    if self.gui_held > 0 {
-                        self.gui_held -= 1;
-                    }
-                } else {
-                    self.gui_held += 1;
-                }
+                self.gui_held = is_down;
             }
         }
     }

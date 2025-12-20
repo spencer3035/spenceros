@@ -116,7 +116,7 @@ pub const STAGE_1_SECTIONS: usize = 0x21;
 /// Number of 512 byte sections stage 2 takes up
 pub const STAGE_2_SECTIONS: usize = 0x20;
 /// Number of 512 byte sections stage 3 takes up
-pub const STAGE_3_SECTIONS: usize = 0x1;
+pub const STAGE_3_SECTIONS: usize = 0x8;
 /// Total number of boot sectors we need to read. Not including the 0th boot sector loaded into
 /// memory from the bios.
 pub const SECTORS_TO_READ: usize = STAGE_1_SECTIONS + STAGE_2_SECTIONS + STAGE_3_SECTIONS;

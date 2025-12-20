@@ -155,10 +155,14 @@ mod test {
         for line in out.lines() {
             if line.contains("_end_address") {
                 let addr = get_addr_from_line(line);
+                let expected_size = addr as isize - start as isize;
+                let rem = expected_size % 0x200;
+                assert_eq!(addr % 0x100 , 0 , "_end_address is such that it is not on a sector bountary (remainder 0x{rem:X})" );
+                let num_sectors = expected_size / 0x200;
                 assert_eq!(
                     addr,
                     start + size,
-                    "{} should have _end_address 0x{:X}, found 0x{addr:X}",
+                    "{} should have _end_address 0x{:X} according to config, found 0x{addr:X}. Number of sectors 0x{num_sectors:X}",
                     p.as_ref().display(),
                     start + size,
                 );

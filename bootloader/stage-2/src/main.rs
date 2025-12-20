@@ -64,17 +64,18 @@ fn start() -> ! {
         panic!("No long mode!");
     }
     println_vbe!("Checkpoint");
-    let mut keyboard = KeyboardDriver::new();
-    loop {
-        let ch = keyboard.next_char();
-        print_vbe!("{ch}");
-    }
-
-    // unsafe {
-    //     println!("Setting up paging");
-    //     load_page_tables();
+    // let mut keyboard = KeyboardDriver::new();
+    // loop {
+    //     let ch = keyboard.next_char();
+    //     print_vbe!("{ch}");
     // }
-    // enter_stage_3();
+
+    unsafe {
+        println!("Setting up paging");
+        load_page_tables();
+    }
+    enter_stage_3();
+    panic!("stage 3 returned");
 }
 
 #[link_section = ".start"]
@@ -130,6 +131,7 @@ fn enter_stage_3() {
         );
 
         // Perform a "long jump" to one line down.
+        // NOTE: It doesn't seem to be possible to do this outsidfe of att_syntax.
         asm!(
             // TODO: How do we know this is sector 0x8?
             // Note that 2f means jump (f)orward to the next local label "2:"

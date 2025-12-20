@@ -3,6 +3,8 @@
 
 use core::arch::asm;
 
+use common::println_vbe;
+
 #[cfg(target_os = "none")]
 #[panic_handler]
 #[cfg(target_os = "none")]
@@ -16,8 +18,6 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
-    unsafe {
-        asm!("mov ah, 0xf0", "mov al, 'L'", "mov [0xb8000], ax",);
-    }
+    println_vbe!("Started long");
     loop {}
 }
