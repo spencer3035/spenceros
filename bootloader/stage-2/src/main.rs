@@ -2,13 +2,16 @@
 #![no_main]
 #![recursion_limit = "512"]
 
+//! This staged is entered when we have set up protected mode. It's purpose is to set up and enter
+//! long mode and pass to the next stage
+
 use common::config::*;
 use common::gdt::*;
-use common::print_vbe;
+// use common::print_vbe;
 use common::println_vbe;
 use core::arch::asm;
 
-use crate::keyboard_ps_2::KeyboardDriver;
+// use crate::keyboard_ps_2::KeyboardDriver;
 
 #[allow(unused)]
 static GDT_LONG: Gdt = Gdt::long_mode();

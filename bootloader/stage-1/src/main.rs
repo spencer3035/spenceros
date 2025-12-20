@@ -3,6 +3,11 @@
 #![feature(const_trait_impl)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
+//! This stage's purpose is to switch the BIOS into protected mode and get to the next stage.
+//!
+//! Currently it additionally sets up the VBE display mode because we are not longer able to use
+//! BIOS interrupts once we enter protected mode.
+
 use common::println_bios;
 use common::static_items::{
     bios_info::BiosInfo,

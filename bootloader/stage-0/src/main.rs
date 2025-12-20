@@ -1,6 +1,11 @@
 #![no_std]
 #![no_main]
 
+//! This is the first section that gets loaded into memory by the BIOS and must remain under 512
+//! bytes. It's primary purpose is to do some basic checks, load stage 1 into memory and jump to
+//! it. It is purposely as minimal as possible. Adding extra code here very likely will cause the
+//! binary to be too large, which should cause a compile error when building the image
+
 global_asm!(include_str!("boot.s"));
 
 use core::arch::asm;
