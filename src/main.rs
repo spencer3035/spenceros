@@ -37,7 +37,11 @@ fn assert_sizes() {
     );
 
     // If this fails, need to read more sectors in stage 0 or 1
-    let total_sectors = STAGE_0_SECTIONS + STAGE_1_SECTIONS + STAGE_2_SECTIONS + STAGE_3_SECTIONS;
+    let total_sectors = STAGE_0_SECTIONS
+        + BADFS_HEADER_SECTIONS
+        + STAGE_1_SECTIONS
+        + STAGE_2_SECTIONS
+        + STAGE_3_SECTIONS;
     assert_eq!(
         total_sectors,
         SECTORS_TO_READ + 1,
@@ -48,9 +52,12 @@ fn assert_sizes() {
 fn main() {
     assert_sizes();
 
+    let badfs_header = [0; 512];
+
     // Put all sections together
     let disk_bytes: Vec<u8> = BOOT_0
         .iter()
+        .chain(badfs_header.iter())
         .chain(BOOT_1.iter())
         .chain(BOOT_2.iter())
         .chain(BOOT_3.iter())
@@ -157,7 +164,11 @@ mod test {
                 let addr = get_addr_from_line(line);
                 let expected_size = addr as isize - start as isize;
                 let rem = expected_size % 0x200;
-                assert_eq!(addr % 0x100 , 0 , "_end_address is such that it is not on a sector bountary (remainder 0x{rem:X})" );
+                assert_eq!(
+                    addr % 0x100,
+                    0,
+                    "_end_address is such that it is not on a sector bountary (remainder 0x{rem:X})"
+                );
                 let num_sectors = expected_size / 0x200;
                 assert_eq!(
                     addr,

@@ -173,7 +173,7 @@ impl FramebufferInfo {
             width: 0,
             height: 0,
             bits_per_pixel: 0,
-            framebuffer: 0 as *mut u8,
+            framebuffer: core::ptr::null_mut(),
         }
     }
     /// Checks if the framebuffer is valid. Should be checked before returning/passing a

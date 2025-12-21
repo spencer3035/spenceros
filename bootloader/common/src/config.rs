@@ -33,6 +33,8 @@ macro_rules! layout {
     ) => {
         // Define constants
         $(
+            // This is just a marker, so allow 0 as a pointer
+            #[allow(clippy::zero_ptr)]
             $(#[$attrs])*
             pub const $name: *mut $type = $addr as *mut $type;
         )*
@@ -80,13 +82,15 @@ layout!(
     0x6000 => STACK: [u8; STACK_END - 0x6000],
     /// Start of stage 0 in memory
     0x7c00 => STAGE_0_START: [u8; STAGE_0_SECTIONS * 0x200],
+    /// BadFS Header
+    0x7e00 => BADFS_HEADER: [u8; BADFS_HEADER_SECTIONS * 0x200],
     /// Start of stage 1 in memory
-    0x7e00 => STAGE_1_START: [u8; STAGE_1_SECTIONS * 0x200],
+    0x8000 => STAGE_1_START: [u8; STAGE_1_SECTIONS * 0x200],
     /// Start of stage 2 in memory
-    0xc000 => STAGE_2_START: [u8; STAGE_2_SECTIONS * 0x200],
+    0xc200 => STAGE_2_START: [u8; STAGE_2_SECTIONS * 0x200],
     /// Start of stage 3 in memory
     // NOTE: The 16 bit address limit is currently here
-    0x10000 => STAGE_3_START: [u8; STAGE_3_SECTIONS * 0x200],
+    0x10200 => STAGE_3_START: [u8; STAGE_3_SECTIONS * 0x200],
     /// Start of the PML4T, takes up 0x1000 = 8 * 0x200 bytes
     0x0002_0000 => PML4T_START: [u64; 0x200],
     /// Start of the PDPT,  takes up 0x1000 = 8 * 0x200 bytes
@@ -111,6 +115,8 @@ pub const STACK_END: usize = 0x7c00;
 
 /// Number of 512 byte sections stage 0 takes up
 pub const STAGE_0_SECTIONS: usize = 1;
+/// Number of 512 byte sections the BadFS header takes up
+pub const BADFS_HEADER_SECTIONS: usize = 1;
 /// Number of 512 byte sections stage 1 takes up
 pub const STAGE_1_SECTIONS: usize = 0x21;
 /// Number of 512 byte sections stage 2 takes up
@@ -119,7 +125,8 @@ pub const STAGE_2_SECTIONS: usize = 0x20;
 pub const STAGE_3_SECTIONS: usize = 0x8;
 /// Total number of boot sectors we need to read. Not including the 0th boot sector loaded into
 /// memory from the bios.
-pub const SECTORS_TO_READ: usize = STAGE_1_SECTIONS + STAGE_2_SECTIONS + STAGE_3_SECTIONS;
+pub const SECTORS_TO_READ: usize =
+    STAGE_1_SECTIONS + BADFS_HEADER_SECTIONS + STAGE_2_SECTIONS + STAGE_3_SECTIONS;
 
 #[cfg(test)]
 mod test {
@@ -193,11 +200,18 @@ mod test {
     #[test]
     fn test_stages_contiguous() {
         assert_eq!(
-            STAGE_1_START as usize,
+            BADFS_HEADER as usize,
             STAGE_0_START as usize + STAGE_0_SECTIONS * 0x200,
             "Expected 0x{:X} to start at 0x{:X}",
-            STAGE_1_START as usize,
+            BADFS_HEADER as usize,
             STAGE_0_START as usize + STAGE_0_SECTIONS * 0x200
+        );
+        assert_eq!(
+            STAGE_1_START as usize,
+            BADFS_HEADER as usize + BADFS_HEADER_SECTIONS * 0x200,
+            "Expected 0x{:X} to start at 0x{:X}",
+            STAGE_1_START as usize,
+            BADFS_HEADER as usize + BADFS_HEADER_SECTIONS * 0x200
         );
         assert_eq!(
             STAGE_2_START as usize,
