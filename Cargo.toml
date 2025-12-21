@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 common = { path = "./bootloader/common/" }
-# badfs = { git = "https://github.com/spencer3035/badfs", branch = "main" }
+badfs = { git = "https://github.com/spencer3035/badfs", branch = "main" }
 
 [build-dependencies]
 llvm-tools = "0.1.1"
