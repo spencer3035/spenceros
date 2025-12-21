@@ -1,10 +1,11 @@
 [package]
 name = "spenceros"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 common = { path = "./bootloader/common/" }
+# badfs = { git = "https://github.com/spencer3035/badfs", branch = "main" }
 
 [build-dependencies]
 llvm-tools = "0.1.1"

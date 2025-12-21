@@ -3,33 +3,18 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
     flake-utils.url = "github:numtide/flake-utils";
-    rust-overlay.url = "github:oxalica/rust-overlay";
-    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   # TODO : Understand what self does
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }:
+  outputs = { self, nixpkgs, flake-utils, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
-        overlays = [ (import rust-overlay) ];
-        pkgs = import nixpkgs { inherit system overlays; };
-        #rustVersion = pkgs.rust-bin.stable.latest.default;
-        rustVersion = pkgs.rust-bin.nightly.latest.default.override {
-          extensions = [ "rust-src" ];
-          # targets = [ "x86_64-unknown-none" ];
-        };
-        #rustVersion = (pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
-        #rustPlatform = pkgs.makeRustPlatform {
-        #  cargo = rustVersion;
-        #  rustc = rustVersion;
-        #};
-
+        pkgs = import nixpkgs { inherit system ; };
         buildInputs = with pkgs; [
           # coreboot-toolchain.i386
           nasm
           qemu
           unixtools.xxd
-          rustVersion
           gdb
         ];
         inherit (pkgs) stdenv;
