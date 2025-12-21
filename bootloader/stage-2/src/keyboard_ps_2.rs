@@ -11,6 +11,7 @@ pub struct KeyboardDriver {
 }
 
 impl KeyboardDriver {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self::default()
     }
@@ -19,6 +20,7 @@ impl KeyboardDriver {
         has_scancode()
     }
 
+    #[allow(dead_code)]
     pub fn next_char(&mut self) -> char {
         loop {
             let kc = self.next_keypress();

@@ -36,7 +36,7 @@ pub(crate) unsafe fn load_protected_gdt() {
         };
         GDT_POINTER = GdtPointer::new(
             gdt_addr,
-            (Gdt::NUM_ENTRIES * size_of::<u64> as u16 - 1) as u16,
+            (Gdt::NUM_ENTRIES * size_of::<u64>() as u16 - 1) as u16,
         );
         asm!(
             "lgdt [{}]",

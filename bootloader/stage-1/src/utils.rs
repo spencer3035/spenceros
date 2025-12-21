@@ -178,6 +178,5 @@ pub fn next_keypress() -> char {
             inout("ax") ax,
         );
     }
-    let ch = (ax & 0xFF) as u8 as char;
-    ch
+    (ax & 0xFF) as u8 as char
 }

@@ -37,7 +37,7 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
 }
 
 #[allow(dead_code)]
-#[repr(packed)]
+#[repr(C, packed)]
 #[derive(Debug)]
 struct MemoryMapEntry {
     base_address: u64,
@@ -229,12 +229,12 @@ unsafe fn load_page_tables() {
     // Identity map the PT to the first 2 MB
     // SAFETY: PT_START is expected to be uninitalized, we initialize all the values here
     let pt: &mut [u64; 0x200] = unsafe { PT_START.as_mut().unwrap() };
-    for ii in 0..0x200 {
+    (0..0x200).for_each(|ii| {
         let addr: u64 = 0x1000 * (ii as u64);
         let flags: u64 = PRESENT | READ_WRITE;
         let entry = addr | flags;
         pt[ii] = entry;
-    }
+    });
 }
 
 // Uses CPUID to check for long mode

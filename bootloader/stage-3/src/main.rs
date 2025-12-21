@@ -7,7 +7,6 @@ use common::println_vbe;
 
 #[cfg(target_os = "none")]
 #[panic_handler]
-#[cfg(target_os = "none")]
 fn panic(_info: &core::panic::PanicInfo) -> ! {
     // println!("PANIC: {info}");
     loop {

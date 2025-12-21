@@ -186,11 +186,7 @@ impl EdidData {
     fn is_valid(&self) -> bool {
         // TODO: Convert to error instead of bool
         // TODO: Add more checks
-        if self.header != [0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0] {
-            false
-        } else {
-            true
-        }
+        self.header == [0, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0]
     }
 
     const fn null() -> Self {
