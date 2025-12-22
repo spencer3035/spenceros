@@ -134,6 +134,8 @@ fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Option<u1
 }
 
 /// SAFETY: Can only be called by one thread at a time, contains mutable static information
+// NOTE: This inline never seems to prevent the `asm!` call from messing up the stack? Not sure why
+#[inline(never)]
 fn set_vbe_mode(best_mode: &FramebufferInfo) {
     const USE_LINEAR_FRAME_BUFFER: u16 = 0x4000;
     #[allow(dead_code)]
@@ -141,6 +143,8 @@ fn set_vbe_mode(best_mode: &FramebufferInfo) {
     // Set the mode
     unsafe {
         let mut ax = 0x4f02;
+        // TODO: For some reason this messes up the stack... sometimes?
+        // TODO: Check what variables/registers this interrupt modifies
         asm!(
             "int 0x10",
             inout("ax") ax,
