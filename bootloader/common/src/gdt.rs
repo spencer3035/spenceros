@@ -6,7 +6,7 @@ pub struct GdtEntry(u64);
 
 impl GdtEntry {
     #[inline]
-    const fn null() -> GdtEntry {
+    pub const fn null() -> GdtEntry {
         GdtEntry(0)
     }
 
@@ -148,6 +148,22 @@ pub struct Gdt {
 
 impl Gdt {
     pub const NUM_ENTRIES: usize = 3;
+
+    pub const fn protected() -> Self {
+        Self {
+            null: GdtEntry::null(),
+            code: GdtEntry::code_32(),
+            data: GdtEntry::data_32(),
+        }
+    }
+
+    pub const fn long() -> Self {
+        Self {
+            null: GdtEntry::null(),
+            code: GdtEntry::code_64(),
+            data: GdtEntry::data_64(),
+        }
+    }
 }
 
 impl Default for Gdt {

@@ -48,7 +48,7 @@ struct MemoryMapEntry {
 
 mod keyboard_ps_2;
 
-fn start() -> ! {
+fn main() -> ! {
     println_vbe!("Started protected mode");
     // idt::setup_idt();
     // println_vbe!("DONE");
@@ -77,35 +77,32 @@ fn start() -> ! {
     }
     // There is currently something wrong with setting up long mode
     println!("Stoping before stage 3");
+    load_kernel();
     loop {}
     enter_stage_3();
     panic!("stage 3 returned");
 }
 
 fn load_kernel() {
-    unsafe {
-        let header_ptr = BADFS_HEADER.read();
-        let hdr = match badfs::header::HeaderDef::read(&header_ptr) {
-            Ok(hdr) => hdr,
-            Err(err) => {
-                panic!("badfs error: {err}");
-            }
-        };
+    let header_ptr = unsafe { BADFS_HEADER.read() };
+    let hdr = match badfs::header::HeaderDef::read(&header_ptr) {
+        Ok(hdr) => hdr,
+        Err(err) => {
+            panic!("badfs error: {err}");
+        }
+    };
 
-        // println!("addr = 0x{:X}", hdr.get_entry_address(0));
-    }
-}
+    println!("entry = 0x{:X}", hdr.get_entry_address(0).unwrap());
 
-fn load_disk() {
-    // TODO: Use INT 0x13 AH = 0x42 to load from disk
+    // load_disk();
+
+    // Test loading header to another address
 }
 
 #[unsafe(link_section = ".start")]
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
-    let disk_number = unsafe { BIOS_INFO.read().disk_number };
-    println!("disk(2) = {disk_number}");
-    start();
+    main();
 }
 
 fn enter_stage_3() {

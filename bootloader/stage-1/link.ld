@@ -32,7 +32,7 @@ SECTIONS {
     }
 
     _second_stage_end = .;
-    . = 0xc200 - 0x2;
+    . = 0x10000 - 0x2;
     .end_marker :
     {
         SHORT(0xdead)

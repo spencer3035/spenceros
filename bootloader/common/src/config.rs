@@ -87,10 +87,10 @@ layout!(
     /// Start of stage 1 in memory
     0x8000 => STAGE_1_START: [u8; STAGE_1_SECTIONS * 0x200],
     /// Start of stage 2 in memory
-    0xc200 => STAGE_2_START: [u8; STAGE_2_SECTIONS * 0x200],
+    0x1_0000 => STAGE_2_START: [u8; STAGE_2_SECTIONS * 0x200],
     /// Start of stage 3 in memory
     // NOTE: The 16 bit address limit is currently here
-    0x10200 => STAGE_3_START: [u8; STAGE_3_SECTIONS * 0x200],
+    0x1_4000 => STAGE_3_START: [u8; STAGE_3_SECTIONS * 0x200],
     /// Start of the PML4T, takes up 0x1000 = 8 * 0x200 bytes
     0x0002_0000 => PML4T_START: [u64; 0x200],
     /// Start of the PDPT,  takes up 0x1000 = 8 * 0x200 bytes
@@ -99,6 +99,8 @@ layout!(
     0x0002_2000 => PDT_START: [u64; 0x200],
     /// Start of the PT,    takes up 0x1000 = 8 * 0x200 bytes
     0x0002_3000 => PT_START: [u64; 0x200],
+    /// Scratch area for larger temporary operations
+    0x0003_0000 => SCRATCH: [u8; 0x1_0000],
     /// Reserved, do not use
     0x0008_0000 => _BIOS_DATA_AREA_EXTENDED : [u8; 0x2_0000],
     /// Reserved, do not use
@@ -118,7 +120,7 @@ pub const STAGE_0_SECTIONS: usize = 1;
 /// Number of 512 byte sections the BadFS header takes up
 pub const BADFS_HEADER_SECTIONS: usize = 1;
 /// Number of 512 byte sections stage 1 takes up
-pub const STAGE_1_SECTIONS: usize = 0x21;
+pub const STAGE_1_SECTIONS: usize = 0x40;
 /// Number of 512 byte sections stage 2 takes up
 pub const STAGE_2_SECTIONS: usize = 0x20;
 /// Number of 512 byte sections stage 3 takes up

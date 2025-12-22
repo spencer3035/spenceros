@@ -1,12 +1,12 @@
 use proc_macro2::Literal;
-use syn::parse::Parse;
-use syn::parse::ParseStream;
-use syn::punctuated::Punctuated;
 use syn::DataEnum;
 use syn::DeriveInput;
 use syn::Error;
 use syn::Ident;
 use syn::Token;
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::punctuated::Punctuated;
 
 use super::SCAN_TRAIT;
 
