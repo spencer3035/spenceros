@@ -3,6 +3,7 @@ use core::{arch::asm, ptr::addr_of};
 use common::{
     config::STAGE_2_START,
     gdt::{Gdt, GdtPointer},
+    println_vbe,
     static_items::static_variable::StaticVariable as _,
 };
 
@@ -34,10 +35,9 @@ pub(crate) unsafe fn load_protected_gdt() {
             *gdt = Gdt::protected_mode();
             gdt as *const Gdt
         };
-        GDT_POINTER = GdtPointer::new(
-            gdt_addr,
-            (Gdt::NUM_ENTRIES * size_of::<u64>() as u16 - 1) as u16,
-        );
+        // Each entry is 8 bytes, you subtract 1 because it is defined that way
+        let size = (Gdt::NUM_ENTRIES * 8 - 1) as u16;
+        GDT_POINTER = GdtPointer::new(gdt_addr, size);
         asm!(
             "lgdt [{}]",
              in(reg) addr_of!(GDT_POINTER),

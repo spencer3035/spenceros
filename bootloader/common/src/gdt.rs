@@ -147,7 +147,7 @@ pub struct Gdt {
 }
 
 impl Gdt {
-    pub const NUM_ENTRIES: u16 = 3;
+    pub const NUM_ENTRIES: usize = 3;
 }
 
 impl Default for Gdt {
