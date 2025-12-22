@@ -3,7 +3,6 @@ use core::{arch::asm, ptr::addr_of};
 use common::{
     config::STAGE_2_START,
     gdt::{Gdt, GdtPointer},
-    println_vbe,
     static_items::static_variable::StaticVariable as _,
 };
 

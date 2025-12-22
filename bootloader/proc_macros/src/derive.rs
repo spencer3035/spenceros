@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 use syn::DeriveInput;
 
-mod gen;
+mod gen_code;
 mod parse;
 
 /// Attribute name we look for
@@ -39,5 +39,5 @@ pub fn from_scancodes_impl(input: &DeriveInput) -> syn::Result<TokenStream> {
         }
     }
 
-    Ok(gen::gen_impl(&items, name))
+    Ok(gen_code::gen_impl(&items, name))
 }

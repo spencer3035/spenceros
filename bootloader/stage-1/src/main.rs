@@ -70,8 +70,8 @@ fn update_bios_info(disk_number: u16) {
     }
 }
 
-#[link_section = ".start"]
-#[no_mangle]
+#[unsafe(link_section = ".start")]
+#[unsafe(no_mangle)]
 pub extern "C" fn _start(disk_number: u16) {
     // utils::print_unsafe_fn_location(next_stage);
     main(disk_number);

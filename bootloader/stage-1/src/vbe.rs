@@ -1,6 +1,5 @@
 use core::arch::asm;
-use core::ptr::addr_of;
-use core::ptr::addr_of_mut;
+use core::cell::UnsafeCell;
 
 use common::config::FONT;
 use common::io::framebuffer::FramebufferInfo;
@@ -9,11 +8,45 @@ use common::println_bios;
 use common::static_items::{static_variable::StaticVariable as _, vbe_display::VbeDisplayInfo};
 
 /// Inits the VBE screen, should only be called once
+#[inline(never)]
 pub fn init_graphical() {
-    init();
+    // Note: The whole reason we need to do this is to avoid storing all the data on the stack. We
+    // are in an environment that has a very minimal stack. If we just create a variable normally
+    // via `SharedVariables::new()`, then the stack will grow out of it's expected section and
+    // cause Very Bad Things to happen.
+
+    // SAFETY: We don't use threads and this is the only reference we make.
+    #[allow(static_mut_refs)]
+    let mut shared = unsafe { SHARED_STATIC.0.get_mut() };
+    init(&mut shared);
 }
 
-fn init() {
+#[repr(transparent)]
+pub struct SyncUnsafeCell<T>(UnsafeCell<T>);
+unsafe impl<T: Sync> Sync for SyncUnsafeCell<T> {}
+
+static mut SHARED_STATIC: SyncUnsafeCell<SharedVariables> =
+    SyncUnsafeCell(UnsafeCell::new(SharedVariables::new()));
+
+struct SharedVariables {
+    vbe_mode_def: VesaVbeModeDef,
+    vesa_vbe_block_def: VesaVbeBlockDef,
+    frame_buffer_info: FramebufferInfo,
+    edid_data: EdidData,
+}
+
+impl SharedVariables {
+    const fn new() -> Self {
+        Self {
+            vbe_mode_def: VesaVbeModeDef::null(),
+            vesa_vbe_block_def: VesaVbeBlockDef::null(),
+            frame_buffer_info: FramebufferInfo::null(),
+            edid_data: EdidData::null(),
+        }
+    }
+}
+
+fn init(shared: &mut SharedVariables) {
     assert_eq!(size_of::<VesaVbeBlockDef>(), 512, "VbeInfoBlock bad size");
     assert_eq!(
         size_of::<VesaVbeModeDef>(),
@@ -21,34 +54,34 @@ fn init() {
         "VesaModeInfoBlock bad size"
     );
     init_font();
-    init_framebuffer();
+    init_framebuffer(shared);
     VbeDisplay::init();
 }
 
-fn init_framebuffer() {
+fn init_framebuffer(shared: &mut SharedVariables) {
     // Get the best mode relative to these target numbers
-    let (width, height, depth) = get_preferred_width_height_depth();
+    let (width, height, depth) = get_preferred_width_height_depth(&mut shared.edid_data);
 
     // SAFETY: This is the only time this function is called
-    let vbe_block = unsafe { VesaVbeBlockDef::init_and_get() };
-    let modes = vbe_block.get_modes();
-    let best_mode = get_best_mode(width, height, depth, modes).unwrap();
+    VesaVbeBlockDef::init_and_get(&mut shared.vesa_vbe_block_def);
+    let modes = shared.vesa_vbe_block_def.get_modes();
+    let best_mode = get_best_mode(width, height, depth, modes, shared).unwrap();
 
     // SAFETY: framebuffer only exists within the scope
     unsafe {
         // Read best mode to structure
-        let framebuffer = match load_framebuffer(best_mode) {
+        match load_framebuffer(best_mode, shared) {
             Ok(f) => f,
             Err(e) => panic!("couldn't load mode {best_mode}: {e}"),
         };
         println_bios!("About to init graphical and clear screen");
         // prompt_continue();
-        set_vbe_mode(framebuffer);
+        set_vbe_mode(&shared.frame_buffer_info);
         {
             // This needs to have as short a lifetime as possible. VbeDisplayInfo is used mutably
             // and immutably by the printing logic, so it is not safe to keep it around any longer
             // than necessary.
-            VbeDisplayInfo::get_mut().framebuffer = framebuffer.clone();
+            VbeDisplayInfo::get_mut().framebuffer = shared.frame_buffer_info.clone();
         }
     }
 }
@@ -102,28 +135,31 @@ macro_rules! check_vbe_ax {
     };
 }
 
-static mut FRAME_BUFFER_INFO: FramebufferInfo = FramebufferInfo::null();
-
 /// Gets the best vbe mode given desired width, height, depth, and a list of supported mode ids
-fn get_best_mode(width: u16, height: u16, depth: u8, modes: &[u16]) -> Option<u16> {
+fn get_best_mode(
+    width: u16,
+    height: u16,
+    depth: u8,
+    modes: &[u16],
+    shared: &mut SharedVariables,
+) -> Option<u16> {
     let mut diff = u16::MAX;
     let mut best_mode = None;
 
     for mode_id in modes.iter() {
         // SAFETY: framebuffer only exists within the scope
-        unsafe {
-            let framebuffer = match load_framebuffer(*mode_id) {
-                Err(_) => {
-                    continue;
-                }
-                Ok(f) => f,
-            };
-            // Check the residual
-            let mode_diff = framebuffer.width.abs_diff(width) + framebuffer.height.abs_diff(height);
-            if framebuffer.bits_per_pixel == depth && mode_diff <= diff {
-                diff = mode_diff;
-                best_mode = Some(*mode_id);
+        match load_framebuffer(*mode_id, shared) {
+            Err(_) => {
+                continue;
             }
+            Ok(f) => f,
+        };
+        // Check the residual
+        let mode_diff = shared.frame_buffer_info.width.abs_diff(width)
+            + shared.frame_buffer_info.height.abs_diff(height);
+        if shared.frame_buffer_info.bits_per_pixel == depth && mode_diff <= diff {
+            diff = mode_diff;
+            best_mode = Some(*mode_id);
         }
     }
 
@@ -235,8 +271,7 @@ struct EdidDataDisplay {
     feature_support: u8,
 }
 
-static mut EDID_DATA: EdidData = EdidData::null();
-fn get_preferred_width_height_depth() -> (u16, u16, u8) {
+fn get_preferred_width_height_depth(shared: &mut EdidData) -> (u16, u16, u8) {
     assert_eq!(size_of::<EdidData>(), 0x80);
 
     let mut ax = 0x4f15;
@@ -249,7 +284,7 @@ fn get_preferred_width_height_depth() -> (u16, u16, u8) {
             "mov es, cx",
             "int 0x10",
             inout("ax") ax,
-            in("di") addr_of_mut!(EDID_DATA),
+            in("di") shared as *mut EdidData,
         );
     };
 
@@ -257,13 +292,11 @@ fn get_preferred_width_height_depth() -> (u16, u16, u8) {
         panic!("Bad ax : 0x{ax:x}");
     }
 
-    unsafe {
-        if !EDID_DATA.is_valid() {
-            panic!("Bad edid data");
-        }
+    if !shared.is_valid() {
+        panic!("Bad edid data");
     }
 
-    let (def, info) = unsafe { (EDID_DATA.video_input_def, &EDID_DATA.display_timing) };
+    let (def, info) = (shared.video_input_def, &shared.display_timing);
     let depth = if def & 0b10000000 != 0 {
         let bits_per_color = match (def & 0b01110000) >> 4 {
             0b001 => 6,
@@ -284,9 +317,6 @@ fn get_preferred_width_height_depth() -> (u16, u16, u8) {
 
     (width, height, depth)
 }
-
-/// Static location to store the information at runtime
-static mut VESA_VBE_BLOCK_DEF: VesaVbeBlockDef = VesaVbeBlockDef::null();
 
 /// Defininition/memory layout for the Vesa VBE info block 3.0
 #[repr(C, packed)]
@@ -309,7 +339,7 @@ pub struct VesaVbeBlockDef {
 }
 
 impl VesaVbeBlockDef {
-    fn get_modes(&self) -> &[u16] {
+    fn get_modes(&self) -> &'static [u16] {
         let mode_ptr = self.video_mode_ptr as *const u16;
         let max_modes = 0x100;
         let mut length = 0;
@@ -344,10 +374,8 @@ impl VesaVbeBlockDef {
         }
     }
 
-    /// Loads VBE from BIOS and returns a reference to it
-    ///
-    /// # SAFETY: This should only be called once. It mutates a static variable and returns a
-    unsafe fn init_and_get() -> &'static Self {
+    /// Loads VBE from BIOS into passed in structure
+    fn init_and_get(shared: &mut VesaVbeBlockDef) {
         let mut ax: u16 = 0x4f00;
         unsafe {
             // SAFETY: The layout of Self needs to match the spec
@@ -355,16 +383,12 @@ impl VesaVbeBlockDef {
             asm!(
                 "int 0x10",
                 inout("ax") ax,
-                in("di") addr_of_mut!(VESA_VBE_BLOCK_DEF)
+                in("di") shared as *mut VesaVbeBlockDef
             );
         };
 
         check_vbe_ax!(ax, "VBE load fail code 0x{ax:x}");
-        unsafe {
-            VESA_VBE_BLOCK_DEF.check().unwrap();
-            // SAFETY: Pointer should be aligned because it is declared as a static
-            addr_of!(VESA_VBE_BLOCK_DEF).as_ref().unwrap()
-        }
+        shared.check().unwrap();
     }
 
     /// Checks if block is valid
@@ -384,14 +408,8 @@ impl VesaVbeBlockDef {
     }
 }
 
-static mut VBE_MODE_DEF: VesaVbeModeDef = VesaVbeModeDef::null();
-
 /// Reads a VBE mode to frame buffer
-///
-/// # SAFETY: This uses a static variable to return references, so there should only be one
-/// refernce to the return value at a time (don't call this function twice in the same scope or
-/// deeper).
-unsafe fn load_framebuffer(mode_id: u16) -> Result<&'static FramebufferInfo, VbeError> {
+fn load_framebuffer(mode_id: u16, shared: &mut SharedVariables) -> Result<(), VbeError> {
     let mut ax = 0x4f01;
 
     unsafe {
@@ -400,36 +418,34 @@ unsafe fn load_framebuffer(mode_id: u16) -> Result<&'static FramebufferInfo, Vbe
             "int 0x10",
             inout("ax") ax,
             in("cx") mode_id,
-            in("di") addr_of_mut!(VBE_MODE_DEF)
+            in("di") &mut shared.vbe_mode_def as *mut VesaVbeModeDef
         );
-        VBE_MODE_DEF.check()?;
     }
+    shared.vbe_mode_def.check()?;
 
     check_vbe_ax!(ax, "VBE mode fail");
 
     // Check it is a mode we want
     // Packed pixel or direct color
     let memory_model_works =
-        unsafe { VBE_MODE_DEF.memory_model == 4 || VBE_MODE_DEF.memory_model == 6 };
+        shared.vbe_mode_def.memory_model == 4 || shared.vbe_mode_def.memory_model == 6;
     let required_flags = SUPPORTED_BY_HARDWARE | LINEAR_FRAME_BUFFER | NO_VGA_COMPAT | GRAPICS_MODE;
-    let has_flags = unsafe { VBE_MODE_DEF.mode_attributes & required_flags == required_flags };
+    let has_flags = shared.vbe_mode_def.mode_attributes & required_flags == required_flags;
     let good_mode = memory_model_works && has_flags;
     if !good_mode {
         return Err(VbeError::ModeNotGood);
     }
 
-    unsafe {
-        FRAME_BUFFER_INFO = FramebufferInfo {
-            mode_id,
-            bits_per_pixel: VBE_MODE_DEF.bits_per_pixel,
-            bytes_per_scan_line: VBE_MODE_DEF.bytes_per_scan_line,
-            width: VBE_MODE_DEF.width,
-            height: VBE_MODE_DEF.height,
-            framebuffer: VBE_MODE_DEF.framebuffer as *mut u8,
-        };
-    }
+    shared.frame_buffer_info = FramebufferInfo {
+        mode_id,
+        bits_per_pixel: shared.vbe_mode_def.bits_per_pixel,
+        bytes_per_scan_line: shared.vbe_mode_def.bytes_per_scan_line,
+        width: shared.vbe_mode_def.width,
+        height: shared.vbe_mode_def.height,
+        framebuffer: shared.vbe_mode_def.framebuffer as *mut u8,
+    };
 
-    unsafe { Ok(addr_of!(FRAME_BUFFER_INFO).as_ref().unwrap()) }
+    Ok(())
 }
 
 /// Defininition/memory layout for the VesaVbeMode 3.0

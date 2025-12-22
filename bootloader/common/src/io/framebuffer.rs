@@ -164,6 +164,9 @@ pub struct FramebufferInfo {
     // TODO: Put color mask
 }
 
+/// Safety: We don't use threads, this is only needed because we store a pointer internally
+unsafe impl Sync for FramebufferInfo {}
+
 impl FramebufferInfo {
     /// Gets null, invalid frame buffer. Can be used for construction
     pub const fn null() -> FramebufferInfo {

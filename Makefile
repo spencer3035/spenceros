@@ -10,6 +10,7 @@ build:
 
 test: 
 	cargo test --package common
+	cargo test --package proc_macros
 	cargo build --package common --target ./tuples/i386-bit16.json ${TEST_FLAGS}
 	cargo build --package common --target ./tuples/i386-bit32.json ${TEST_FLAGS}
 	cargo build --package common --target ./tuples/x86_64-unknown-kernel.json ${TEST_FLAGS}

@@ -4,8 +4,8 @@ use quote::quote;
 use std::collections::BTreeMap;
 use syn::Ident;
 
-use super::parse::VariantInfo;
 use super::SCAN_TRAIT;
+use super::parse::VariantInfo;
 
 /// Generates an implementation for FromScancodes
 pub fn gen_impl(items: &[VariantInfo], name: &Ident) -> TokenStream {
@@ -100,15 +100,15 @@ fn gen_has_next(items: &[VariantInfo]) -> TokenStream {
 
 /// Generates a function like the following
 /// ```
-/// #enum KeyCode {
-/// #    KcEsc,
-/// #    Kc1,
-/// #    Kc2,
-/// #    Kc3,
-/// #    Kc4,
-/// #}
-/// #impl KeyCode {
-/// #
+/// # enum KeyCode {
+/// #     KcEsc,
+/// #     Kc1,
+/// #     Kc2,
+/// #     Kc3,
+/// #     Kc4,
+/// # }
+/// # impl KeyCode {
+///
 /// fn to_char_lower(&self) -> Option<char> {
 ///     match self {
 ///         Self::KcEsc => None,
@@ -127,7 +127,7 @@ fn gen_has_next(items: &[VariantInfo]) -> TokenStream {
 ///         Self::Kc4 => Some('$'),
 ///     }
 /// }
-/// #}
+/// # }
 /// ```
 fn gen_to_char(items: &[VariantInfo]) -> TokenStream {
     let names = items.iter().map(|i| &i.name);
@@ -166,6 +166,7 @@ fn gen_to_char(items: &[VariantInfo]) -> TokenStream {
 /// #     Kc3,
 /// #     Kc4,
 /// # }
+/// # impl KeyCode {
 ///
 /// fn from_scancode_and_depth(code: u8, idx: u8) -> Option<(Self, bool)> {
 ///     if false {
@@ -194,6 +195,8 @@ fn gen_to_char(items: &[VariantInfo]) -> TokenStream {
 ///         None
 ///     }
 /// }
+///
+/// # }
 /// ```
 fn gen_from_scancode_and_depth(items: &[VariantInfo]) -> TokenStream {
     // Map from index to the block that will be placed inside the if statement at that index

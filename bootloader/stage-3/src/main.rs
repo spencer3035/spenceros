@@ -14,8 +14,8 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
     }
 }
 
-#[link_section = ".start"]
-#[no_mangle]
+#[unsafe(link_section = ".start")]
+#[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     println_vbe!("Started long");
     loop {}

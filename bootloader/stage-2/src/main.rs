@@ -91,6 +91,8 @@ fn load_kernel() {
                 panic!("badfs error: {err}");
             }
         };
+
+        // println!("addr = 0x{:X}", hdr.get_entry_address(0));
     }
 }
 
@@ -98,8 +100,8 @@ fn load_disk() {
     // TODO: Use INT 0x13 AH = 0x42 to load from disk
 }
 
-#[link_section = ".start"]
-#[no_mangle]
+#[unsafe(link_section = ".start")]
+#[unsafe(no_mangle)]
 pub extern "C" fn _start() -> ! {
     let disk_number = unsafe { BIOS_INFO.read().disk_number };
     println!("disk(2) = {disk_number}");

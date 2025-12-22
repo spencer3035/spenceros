@@ -21,9 +21,7 @@ pub trait StaticVariable: Sized + Default {
     /// - [Self::init()] has been called to initialize the memory
     /// - Need to manually enforce borrowing rules. Only one mutable reference can exist at a time
     unsafe fn get_mut() -> &'static mut Self {
-        {
-            Self::addr().as_mut().unwrap()
-        }
+        unsafe { Self::addr().as_mut().unwrap() }
     }
 
     /// Gets reference to contained data
@@ -34,8 +32,6 @@ pub trait StaticVariable: Sized + Default {
     /// - [Self::init()] has been called to initialize the memory
     /// - Need to manually enforce borrowing rules.
     unsafe fn get() -> &'static Self {
-        {
-            Self::addr().as_ref().unwrap()
-        }
+        unsafe { Self::addr().as_ref().unwrap() }
     }
 }
