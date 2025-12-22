@@ -4,8 +4,9 @@ use crate::{config::BIOS_INFO, static_items::static_variable::StaticVariable};
 #[repr(C)]
 #[derive(Default)]
 pub struct BiosInfo {
-    pub memory_map_start: *const u8,
-    pub memory_map_count: u32,
+    pub disk_number: u16,
+    // pub memory_map_start: *const u8,
+    // pub memory_map_count: u32,
 }
 
 impl StaticVariable for BiosInfo {

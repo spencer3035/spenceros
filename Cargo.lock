@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "badfs"
 version = "0.1.0"
-source = "git+https://github.com/spencer3035/badfs?branch=main#9206f99b6dd73cf282641b676508ceb541ebe72a"
+source = "git+https://github.com/spencer3035/badfs?branch=main#14ff28cc07fb74839f2f77525ecf8e44dd6322e7"
 
 [[package]]
 name = "common"
@@ -78,6 +78,7 @@ dependencies = [
 name = "stage-2"
 version = "0.1.0"
 dependencies = [
+ "badfs",
  "common",
  "proc_macros",
 ]

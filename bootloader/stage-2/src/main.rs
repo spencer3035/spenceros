@@ -82,9 +82,27 @@ fn start() -> ! {
     panic!("stage 3 returned");
 }
 
+fn load_kernel() {
+    unsafe {
+        let header_ptr = BADFS_HEADER.read();
+        let hdr = match badfs::header::HeaderDef::read(&header_ptr) {
+            Ok(hdr) => hdr,
+            Err(err) => {
+                panic!("badfs error: {err}");
+            }
+        };
+    }
+}
+
+fn load_disk() {
+    // TODO: Use INT 0x13 AH = 0x42 to load from disk
+}
+
 #[link_section = ".start"]
 #[no_mangle]
 pub extern "C" fn _start() -> ! {
+    let disk_number = unsafe { BIOS_INFO.read().disk_number };
+    println!("disk(2) = {disk_number}");
     start();
 }
 

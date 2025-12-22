@@ -33,8 +33,6 @@ macro_rules! layout {
     ) => {
         // Define constants
         $(
-            // This is just a marker, so allow 0 as a pointer
-            #[allow(clippy::zero_ptr)]
             $(#[$attrs])*
             pub const $name: *mut $type = $addr as *mut $type;
         )*
@@ -63,6 +61,8 @@ macro_rules! layout {
 
 layout!(
     /// Reserved, do not use
+    // This is just a marker, so allow 0 as a pointer
+    #[allow(clippy::zero_ptr)]
     0x0000 => _REAL_MODE_IVT : [u8; 0x400],
     /// Reserved, do not use
     0x0400 => _BIOS_DATA_AREA : [u8; 0x100],

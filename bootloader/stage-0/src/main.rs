@@ -50,8 +50,7 @@ fn main_inner(drive_number: u16) -> extern "C" fn(u16) {
     load_sectors(drive_number);
 
     // Transmute the pointer to the beginning of the next stage to a function and call it.
-    let next_stage: extern "C" fn(disk_number: u16) =
-        unsafe { core::mem::transmute(STAGE_1_START as *const ()) };
+    let next_stage: extern "C" fn(u16) = unsafe { core::mem::transmute(STAGE_1_START) };
     next_stage
 }
 

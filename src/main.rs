@@ -74,7 +74,7 @@ fn assert_sizes() {
 fn main() {
     assert_sizes();
 
-    let badfs_header = [0; 512];
+    let badfs_header = [0; BADFS_HEADER_SECTIONS * 0x200];
 
     // Put all sections together
     let mut disk_bytes: Vec<u8> = BOOT_0

@@ -8,13 +8,16 @@
 //! Currently it additionally sets up the VBE display mode because we are not longer able to use
 //! BIOS interrupts once we enter protected mode.
 
-use common::println_bios;
-use common::static_items::{
-    bios_info::BiosInfo,
-    mem::MemInfo,
-    static_variable::StaticVariable,
-    vbe_display::{Font, VbeDisplayInfo},
+use common::{
+    config::BIOS_INFO,
+    static_items::{
+        bios_info::BiosInfo,
+        mem::MemInfo,
+        static_variable::StaticVariable,
+        vbe_display::{Font, VbeDisplayInfo},
+    },
 };
+use common::{println_bios, println_vbe};
 
 use vbe::init_graphical;
 
@@ -32,7 +35,7 @@ use crate::mem::detect_memory;
 fn init_static_values() {
     // SAFETY: These should only be called once, we call them here
     unsafe {
-        BiosInfo::init();
+        // BiosInfo::init();
         Font::init();
         VbeDisplayInfo::init();
         MemInfo::init();
@@ -41,7 +44,7 @@ fn init_static_values() {
 
 /// Main function, we force inline so that rust will clean up the stack
 #[inline(never)]
-fn main(_disk_number: u16) {
+fn main(disk_number: u16) {
     println_bios!("Starting stage 1");
     enable_a20();
     hint_bios_long_mode();
@@ -53,17 +56,47 @@ fn main(_disk_number: u16) {
 
     // prompt_continue();
     init_graphical();
+    println_vbe!("update bios is at 0x{:X}", update_bios_info as usize);
+    println_vbe!("_start is at 0x{:X}", _start as usize);
+    update_bios_info(disk_number);
 
     // Safety: This is the only mutable reference.
-    let memory_info = unsafe { MemInfo::get_mut() };
-    detect_memory(memory_info);
+    // let memory_info = unsafe { MemInfo::get_mut() };
+    // detect_memory(memory_info);
+}
+
+#[inline(never)]
+fn update_bios_info(disk_number: u16) {
+    // println_vbe!("trying to write = {}", disk_number);
+    unsafe {
+        {
+            // let info: &BiosInfo = &*BIOS_INFO;
+            // println_vbe!("addr = 0x{:X}", BIOS_INFO as usize);
+            // println_vbe!("before = {}", info.disk_number);
+        }
+        {
+            let info: &mut BiosInfo = &mut *BIOS_INFO;
+            info.disk_number = disk_number;
+
+            // let info = BiosInfo {
+            //     // disk_number: 128,
+            //     disk_number,
+            // };
+            // BIOS_INFO.write(info);
+        }
+        {
+            // let info: &BiosInfo = &*BIOS_INFO;
+            // println_vbe!("after = {}", info.disk_number);
+        }
+    }
 }
 
 #[link_section = ".start"]
 #[no_mangle]
-pub extern "C" fn _start(_disk_number: u16) {
+pub extern "C" fn _start(disk_number: u16) {
     // utils::print_unsafe_fn_location(next_stage);
-    main(_disk_number);
+    main(disk_number);
+    println_vbe!("disk_number : {disk_number}");
     unsafe {
         next_stage();
     }
