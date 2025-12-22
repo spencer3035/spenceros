@@ -102,6 +102,13 @@ fn build_stage(out_dir: &Path, stage_number: usize) -> PathBuf {
     elf_to_bin(&build_elf(&local_path, out_dir, &nbits), &nbits)
 }
 
+fn build_kernel(out_dir: &Path) -> PathBuf {
+    let nbits = NBits::Bits64;
+    let local_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("kernel");
+    println!("cargo:rerun-if-changed={}", local_path.display());
+    elf_to_bin(&build_elf(&local_path, out_dir, &nbits), &nbits)
+}
+
 fn main() {
     // Build ./bootloader/common/
     let common_path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -120,6 +127,14 @@ fn main() {
             println!("cargo:rustc-env=BIOS_STAGE{stage}={}", file.display());
         });
 
+        handles.push(h);
+    }
+
+    {
+        let h = std::thread::spawn(move || {
+            let kernel_out = build_kernel(&out);
+            println!("cargo:rustc-env=KERNEL={}", kernel_out.display());
+        });
         handles.push(h);
     }
 

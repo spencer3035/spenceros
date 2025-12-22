@@ -5,7 +5,7 @@ version = 4
 [[package]]
 name = "badfs"
 version = "0.1.0"
-source = "git+https://github.com/spencer3035/badfs?branch=main#cf3dab249861dc9681c9bb35b79d43521d181cb5"
+source = "git+https://github.com/spencer3035/badfs?branch=main#9206f99b6dd73cf282641b676508ceb541ebe72a"
 
 [[package]]
 name = "common"
@@ -13,6 +13,10 @@ version = "0.1.0"
 dependencies = [
  "static_assertions",
 ]
+
+[[package]]
+name = "kernel"
+version = "0.1.0"
 
 [[package]]
 name = "llvm-tools"

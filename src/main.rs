@@ -2,13 +2,40 @@ use std::path::Path;
 
 use common::config::*;
 
+// 20 MB
+const EXTRA_DISK_SPACE: usize = 20 * 10_0000;
+
 const BOOT_0: &[u8] = include_bytes!(env!("BIOS_STAGE0"));
 const BOOT_1: &[u8] = include_bytes!(env!("BIOS_STAGE1"));
 const BOOT_2: &[u8] = include_bytes!(env!("BIOS_STAGE2"));
 const BOOT_3: &[u8] = include_bytes!(env!("BIOS_STAGE3"));
-const EXTRA_BYTES: [u8; 512] = [0; 512];
+const KERNEL: &[u8] = include_bytes!(env!("KERNEL"));
+const EXTRA_BYTES: [u8; EXTRA_DISK_SPACE] = [0; EXTRA_DISK_SPACE];
+
+struct LayoutInfo {
+    total_sectors: usize,
+    bootloader_end: usize,
+}
+
+impl LayoutInfo {
+    fn new() -> Self {
+        // If this fails, need to read more sectors in stage 0 or 1
+        let total_sectors = STAGE_0_SECTIONS
+            + BADFS_HEADER_SECTIONS
+            + STAGE_1_SECTIONS
+            + STAGE_2_SECTIONS
+            + STAGE_3_SECTIONS;
+
+        let bootloader_end = total_sectors * 0x200;
+        Self {
+            total_sectors,
+            bootloader_end,
+        }
+    }
+}
 
 fn assert_sizes() {
+    let info = LayoutInfo::new();
     // First section needs to always be 512 bytes
     assert_eq!(BOOT_0.len(), 512, "boot entry point was not correct size");
     // Check section 1 is the correct size
@@ -37,13 +64,8 @@ fn assert_sizes() {
     );
 
     // If this fails, need to read more sectors in stage 0 or 1
-    let total_sectors = STAGE_0_SECTIONS
-        + BADFS_HEADER_SECTIONS
-        + STAGE_1_SECTIONS
-        + STAGE_2_SECTIONS
-        + STAGE_3_SECTIONS;
     assert_eq!(
-        total_sectors,
+        info.total_sectors,
         SECTORS_TO_READ + 1,
         "Total sectors did not match expected"
     );
@@ -55,7 +77,7 @@ fn main() {
     let badfs_header = [0; 512];
 
     // Put all sections together
-    let disk_bytes: Vec<u8> = BOOT_0
+    let mut disk_bytes: Vec<u8> = BOOT_0
         .iter()
         .chain(badfs_header.iter())
         .chain(BOOT_1.iter())
@@ -64,6 +86,11 @@ fn main() {
         .chain(EXTRA_BYTES.iter())
         .cloned()
         .collect();
+
+    let info = LayoutInfo::new();
+    let mut disk = badfs::BadFsDisk::new(&mut disk_bytes);
+    disk.header_init(info.bootloader_end as u64).unwrap();
+    disk.write_file(b"kernel.bin", KERNEL).unwrap();
 
     // Write to file
     let disk_image_file = Path::new(env!("CARGO_MANIFEST_DIR"))

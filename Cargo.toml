@@ -16,7 +16,8 @@ members = [
   "bootloader/stage-0", 
   "bootloader/stage-1",
   "bootloader/stage-2",
-  "bootloader/stage-3"
+  "bootloader/stage-3",
+  "kernel"
   ]
 
 [profile.dev]
