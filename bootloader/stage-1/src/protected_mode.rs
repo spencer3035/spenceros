@@ -1,12 +1,65 @@
-use core::{arch::asm, ptr::addr_of};
+use core::arch::asm;
 
 use common::{
     config::STAGE_2_START,
     gdt::{Gdt, GdtPointer},
-    static_items::static_variable::StaticVariable as _,
+    println_bios,
 };
 
-pub(crate) static mut GDT_POINTER: GdtPointer = GdtPointer::null();
+static GDT_POINTER: GdtPointer = GdtPointer::new(&GDT_PROTECTED, Gdt::NUM_ENTRIES as u16);
+
+static GDT_LONG: Gdt = Gdt::long_mode();
+static GDT_PROTECTED: Gdt = Gdt::protected_mode();
+
+#[inline(never)]
+pub fn test_unreal() {
+    let ptr = 0x10_0000 as *mut u8;
+    unsafe {
+        *&mut *ptr = 123;
+    }
+
+    unsafe {
+        let val = ptr.read();
+        println_bios!("ptr = {}", val);
+    }
+}
+
+pub fn enter_unreal() {
+    let ds: u16;
+    let ss: u16;
+
+    unsafe {
+        asm!(
+            "mov {0:x}, ds",
+            "mov {1:x}, ss",
+            out(reg) ds,
+            out(reg) ss,
+            options(readonly, nostack, preserves_flags)
+        );
+
+        GDT_PROTECTED.disable_cli_and_load();
+        let cr0 = set_protected_flag();
+
+        asm!(
+            "mov {0:x}, 0x10",
+            "mov ds, {0}",
+            "mov ss, {0}",
+            out(reg) _
+        );
+
+        write_cr0(cr0);
+
+        asm!(
+            "mov ds, {0:x}",
+            "mov ss, {1:x}",
+            in(reg) ds,
+            in(reg) ss,
+            options(nostack, preserves_flags)
+        );
+    }
+
+    todo!()
+}
 
 /// Disable interrupts
 ///
@@ -26,40 +79,33 @@ pub(crate) unsafe fn disable_interrupts() {
 /// Loads the GDT for protected mode
 ///
 /// SAFETY: Interrupts should be disabled before calling
-pub(crate) unsafe fn load_protected_gdt() {
+pub unsafe fn load_protected_gdt() {
     unsafe {
-        let gdt_addr = {
-            Gdt::init();
-            let gdt = Gdt::get_mut();
-            *gdt = Gdt::protected_mode();
-            gdt as *const Gdt
-        };
-        // Each entry is 8 bytes, you subtract 1 because it is defined that way
-        let size = (Gdt::NUM_ENTRIES * 8 - 1) as u16;
-        GDT_POINTER = GdtPointer::new(gdt_addr, size);
-        asm!(
-            "lgdt [{}]",
-             in(reg) addr_of!(GDT_POINTER),
-             options(readonly, nostack, preserves_flags)
-        );
+        GDT_PROTECTED.disable_cli_and_load();
     }
 }
 
-pub(crate) unsafe fn set_protected_flag() {
+/// Sets the protected flag and returns previous cr0 value
+pub(crate) unsafe fn set_protected_flag() -> u32 {
+    let mut cr0: u32;
     unsafe {
-        let mut cr0: u32;
         asm!(
             "mov {:e}, cr0", // Set protection enable bit
             out(reg) cr0,
             options(nomem,nostack,preserves_flags),
         );
+    }
+    let cr0_protected = cr0 | 1;
+    write_cr0(cr0_protected);
+    cr0
+}
 
-        let cr0_protected = cr0 | 1;
-
+fn write_cr0(cr0: u32) {
+    unsafe {
         asm!(
             "mov cr0, {:e}",
-            in(reg) cr0_protected,
-            options(nostack,preserves_flags)
+            in(reg) cr0,
+            options(nomem,nostack,preserves_flags)
         );
     }
 }

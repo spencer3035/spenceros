@@ -1,3 +1,5 @@
+use core::arch::asm;
+
 use crate::{config::GDT_TABLE, static_items::static_variable::StaticVariable};
 
 #[derive(Debug)]
@@ -146,26 +148,6 @@ pub struct Gdt {
     data: GdtEntry,
 }
 
-impl Gdt {
-    pub const NUM_ENTRIES: usize = 3;
-
-    pub const fn protected() -> Self {
-        Self {
-            null: GdtEntry::null(),
-            code: GdtEntry::code_32(),
-            data: GdtEntry::data_32(),
-        }
-    }
-
-    pub const fn long() -> Self {
-        Self {
-            null: GdtEntry::null(),
-            code: GdtEntry::code_64(),
-            data: GdtEntry::data_64(),
-        }
-    }
-}
-
 impl Default for Gdt {
     fn default() -> Self {
         Self {
@@ -193,8 +175,10 @@ pub struct GdtPointer {
     // _pad: [u8; 4],
 }
 
+unsafe impl Sync for GdtPointer {}
+
 impl GdtPointer {
-    pub fn new(base_address: *const Gdt, num_entries: u16) -> Self {
+    pub const fn new(base_address: &Gdt, num_entries: u16) -> Self {
         Self {
             num_entries,
             base_address,
@@ -210,6 +194,8 @@ impl GdtPointer {
 }
 
 impl Gdt {
+    pub const NUM_ENTRIES: usize = 3;
+
     pub const fn protected_mode() -> Gdt {
         Gdt {
             null: GdtEntry::null(),
@@ -223,6 +209,21 @@ impl Gdt {
             null: GdtEntry::null(),
             code: GdtEntry::code_64(),
             data: GdtEntry::data_64(),
+        }
+    }
+
+    /// Disable cli and load gdt
+    ///
+    /// # Safety
+    /// Need to understand the consequences of loading a GDT and disabling inturrupts
+    pub unsafe fn disable_cli_and_load(&self) {
+        unsafe {
+            asm!(
+                "cli",
+                "lgdt [{}]",
+                in(reg) self,
+                options(readonly, nostack, preserves_flags)
+            );
         }
     }
 }

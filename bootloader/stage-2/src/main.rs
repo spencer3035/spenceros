@@ -12,9 +12,6 @@ use core::arch::asm;
 
 // use crate::keyboard_ps_2::KeyboardDriver;
 
-#[allow(unused)]
-static GDT_LONG: Gdt = Gdt::long_mode();
-
 macro_rules! println {
     ($($args:tt)*) => {
         common::println_vbe!($($args)*);

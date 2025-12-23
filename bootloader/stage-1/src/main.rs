@@ -35,6 +35,7 @@ mod utils;
 use utils::*;
 
 use crate::mem::detect_memory;
+use crate::protected_mode::{enter_unreal, test_unreal};
 
 /// Initalize all the variables we want to populate
 fn init_static_values() {
@@ -50,7 +51,14 @@ fn init_static_values() {
 /// Main function, we force inline so that rust will clean up the stack
 #[inline(never)]
 fn main(disk_number: u16) {
+    println_bios!("test_unreal : 0x{:X}", test_unreal as usize);
+    test_unreal();
+    println_bios!("halt");
     enter_unreal();
+    test_unreal();
+    println_bios!("halt");
+    loop {}
+
     println_bios!("Starting stage 1");
     enable_a20();
     hint_bios_long_mode();
@@ -66,10 +74,6 @@ fn main(disk_number: u16) {
     // Safety: This is the only mutable reference.
     let memory_info = unsafe { MemInfo::get_mut() };
     detect_memory(memory_info);
-}
-
-fn enter_unreal() {
-    todo!()
 }
 
 #[inline(never)]
