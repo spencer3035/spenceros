@@ -13,18 +13,21 @@ static GDT_PROTECTED: Gdt = Gdt::protected_mode();
 
 #[inline(never)]
 pub fn test_unreal() {
-    let ptr = 0x10_0000 as *mut u8;
-    unsafe {
-        *&mut *ptr = 123;
-    }
+    let out: u16;
 
     unsafe {
-        let val = ptr.read();
-        println_bios!("ptr = {}", val);
+        asm!(
+        "mov edi, 0x100000",
+        "mov al, 123",
+        "mov [edi], al",
+        "mov {0:x}, [edi]",
+        out(reg) out,
+        );
     }
+    println_bios!("out = {out}");
 }
 
-pub fn enter_unreal() {
+fn enter_unreal() {
     let ds: u16;
     let ss: u16;
 

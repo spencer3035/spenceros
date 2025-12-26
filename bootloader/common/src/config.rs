@@ -85,6 +85,7 @@ layout!(
     /// BadFS Header
     0x7e00 => BADFS_HEADER: [u8; BADFS_HEADER_SECTIONS * 0x200],
     /// Start of stage 1 in memory
+    // NOTE: This is intentionally below the u16::MAX range. It should stay that way
     0x8000 => STAGE_1_START: [u8; STAGE_1_SECTIONS * 0x200],
     /// Start of stage 2 in memory
     0x1_0000 => STAGE_2_START: [u8; STAGE_2_SECTIONS * 0x200],

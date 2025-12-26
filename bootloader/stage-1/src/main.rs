@@ -9,7 +9,9 @@
 //! BIOS interrupts once we enter protected mode.
 
 use core::arch::asm;
+use core::ptr::addr_of;
 
+use badfs::header::HeaderDef;
 use common::config::{
     BADFS_HEADER, SCRATCH, STAGE_0_START, STAGE_1_START, STAGE_2_START, STAGE_3_START,
 };
@@ -35,7 +37,21 @@ mod utils;
 use utils::*;
 
 use crate::mem::detect_memory;
-use crate::protected_mode::{enter_unreal, test_unreal};
+
+#[repr(align(16))]
+struct Buffer<const LEN: usize> {
+    buf: [u8; LEN],
+}
+
+impl<const LEN: usize> Buffer<LEN> {
+    const fn new() -> Self {
+        Self { buf: [0; LEN] }
+    }
+}
+
+const BUFFER_SECTIONS: usize = 10;
+const BUFFER_LEN: usize = 0x200 * BUFFER_SECTIONS;
+static mut BUFFER: Buffer<BUFFER_LEN> = Buffer::new();
 
 /// Initalize all the variables we want to populate
 fn init_static_values() {
@@ -51,14 +67,6 @@ fn init_static_values() {
 /// Main function, we force inline so that rust will clean up the stack
 #[inline(never)]
 fn main(disk_number: u16) {
-    println_bios!("test_unreal : 0x{:X}", test_unreal as usize);
-    test_unreal();
-    println_bios!("halt");
-    enter_unreal();
-    test_unreal();
-    println_bios!("halt");
-    loop {}
-
     println_bios!("Starting stage 1");
     enable_a20();
     hint_bios_long_mode();
@@ -95,15 +103,47 @@ pub extern "C" fn _start(disk_number: u16) {
     // let memory_address = STAGE_0_START as u32;
     // This seems to only work if less than 0xFFFF.
     // Maybe it is segment offset? 0xFFFF:0xFFFF
-    let memory_address = 0x4000;
+    let memory_address = unsafe { &raw mut BUFFER.buf as *mut [u8; BUFFER_LEN] as u16 };
     println_vbe!("memory address : 0x{:X}", memory_address);
     let num_blocks = 1;
     load_disk(disk_number, disk_start_block, memory_address, num_blocks);
+    unsafe {
+        if test_header_eq(
+            addr_of!(BUFFER.buf) as *const () as *const HeaderDef,
+            BADFS_HEADER as *const HeaderDef,
+        ) {
+            println_vbe!("headers equal 1");
+        } else {
+            println_vbe!("Headers not equal 1");
+        }
+
+        let far_addr = 0x60_0000;
+        copy(memory_address as *const u8, far_addr as *mut u8, 0x200);
+
+        if test_header_eq(
+            memory_address as *const HeaderDef,
+            far_addr as *const HeaderDef,
+        ) {
+            println_vbe!("headers equal 2");
+        } else {
+            println_vbe!("Headers not equal 2");
+        }
+    }
     println_vbe!("Stoping before stage 2");
     loop {}
     unsafe {
         next_stage();
     }
+}
+
+unsafe fn copy(src: *const u8, dst: *mut u8, len: usize) {
+    for offset in 0..len {
+        unsafe { *dst.add(offset) = *src.add(offset) }
+    }
+}
+
+fn test_header_eq(a: *const HeaderDef, b: *const HeaderDef) -> bool {
+    unsafe { &*a == &*b }
 }
 
 #[repr(C, align(4))]
@@ -118,8 +158,7 @@ struct DiskAddressPacket {
     transfer_buffer_offset: u16,
     transfer_buffer_segment: u16,
     /// Starting block number
-    start_block_low: u32,
-    start_block_high: u32,
+    start_block: u64,
     // Optional: 64-bit flat address of the transfer buffer.
     // This is used if blocks is 0xFFFF:0xFFFF
     // flat_address_low: u32,
@@ -128,79 +167,103 @@ struct DiskAddressPacket {
 
 impl DiskAddressPacket {
     /// Create a new packet to transfer `blocks` blocks from `from` to `to`
-    fn new(from_block: u64, to: u32, blocks: u16) -> Self {
-        // Self {
-        //     size: 0x10,
-        //     res: 0,
-        //     blocks,
-        //     transfer_buffer: to,
-        //     start_block: from_block,
-        //     flat_address: 0,
-        // }
-
-        // For some reason, setting the transfer buffer to 0xFFFF_FFFF doesn't seem to work as
-        // described and it won't read the flat_address
-        // Self {
-        //     size: 0x18,
-        //     res: 0,
-        //     blocks,
-        //     transfer_buffer_offset: 0xFFFF,
-        //     transfer_buffer_segment: 0xFFFF,
-        //     start_block: from_block,
-        //     flat_address_low: to,
-        //     flat_address_high: 0,
-        // }
-
-        // For some reason, setting the transfer buffer to 0xFFFF_FFFF doesn't seem to work as
-        // described and it won't read the flat_address
+    fn new(from_block: u64, to: u16, blocks: u16) -> Self {
         Self {
-            size: 0x18,
+            size: 0x10,
             res: 0,
             blocks,
-            transfer_buffer_offset: 0xFFFF,
-            transfer_buffer_segment: 0xFFFF,
-            start_block_low: (from_block & 0xFFFF_FFFF) as u32,
-            start_block_high: 0,
+            transfer_buffer_segment: 0,
+            transfer_buffer_offset: to,
+            start_block: from_block,
         }
     }
 }
 
-// INT 13 - IBM/MS INT 13 Extensions - EXTENDED READ
-// 	AH = 42h
-// 	DL = drive number
-// 	DS:SI -> disk address packet (see #00272)
-// Return: CF clear if successful
-// 	    AH = 00h
-// 	CF set on error
-// 	    AH = error code (see #00234)
-// 	    disk address packet's block count field set to number of blocks
-// 	      successfully transferred
-// SeeAlso: AH=02h,AH=41h"INT 13 Ext",AH=43h"INT 13 Ext"
-// Format of disk address packet:
-// Offset	Size	Description	(Table 00272)
-//  00h	BYTE	size of packet (10h or 18h)
-//  01h	BYTE	reserved (0)
-//  02h	WORD	number of blocks to transfer (max 007Fh for Phoenix EDD)
-//  04h	DWORD	-> transfer buffer
-//  08h	QWORD	starting absolute block number
-// 		(for non-LBA devices, compute as
-// 		  (Cylinder*NumHeads + SelectedHead) * SectorPerTrack +
-// 		  SelectedSector - 1
-//  10h	QWORD	(EDD-3.0, optional) 64-bit flat address of transfer buffer;
-// 		  used if DWORD at 04h is FFFFh:FFFFh
+struct DiskRw {
+    disk_number: u16,
+    buffer: Buffer<BUFFER_LEN>,
+}
 
-#[inline(never)]
-fn load_disk(disk_number: u16, disk_start_block: u64, memory_address: u32, num_blocks: u16) {
-    let hdr_addr_orig = BADFS_HEADER;
-    let hdr_addr_new = memory_address as *mut [u8; 0x200];
-    unsafe {
-        println_vbe!("before:");
-        println_vbe!("{:X?}", &(&(*hdr_addr_orig))[0..10]);
-        println_vbe!("{:X?}", &(&(*hdr_addr_new))[0..10]);
+impl DiskRw {
+    pub fn load_from_disk(
+        &mut self,
+        disk_addr: u64,
+        mem_addr: u64,
+        size: usize,
+    ) -> Result<usize, ()> {
+        const SECTION: u64 = 0x200;
+        let disk_start_block = disk_addr / SECTION;
+        let disk_start_offset = disk_addr % SECTION;
+        let disk_end_addr = disk_addr + size as u64;
+        let disk_end_block = disk_end_addr.div_ceil(SECTION);
+        let disk_end_offset = disk_end_addr % SECTION;
+
+        let mut num_to_read = disk_end_block - disk_start_block;
+        let mut block_chunk_ii = disk_start_block;
+        let mut is_first = true;
+        let mut target_addr = mem_addr;
+        loop {
+            let sectors_read = if num_to_read > BUFFER_SECTIONS as u64 {
+                // Load full buffer and copy
+                self.fill_buffer(block_chunk_ii);
+                num_to_read -= BUFFER_SECTIONS as u64;
+                BUFFER_SECTIONS as u64
+            } else if num_to_read > 0 {
+                // Load partial buffer
+                self.fill_buffer_partial(block_chunk_ii, num_to_read as u16);
+                let tmp = num_to_read;
+                num_to_read = 0;
+                tmp
+            } else {
+                break;
+            };
+            block_chunk_ii += sectors_read;
+
+            let is_last = num_to_read == 0;
+            let start_addr = if is_first { disk_start_offset } else { 0 };
+            let end_addr = if is_last {
+                SECTION * (sectors_read - 1) + disk_end_offset
+            } else {
+                sectors_read * SECTION
+            };
+
+            let len = end_addr - start_addr;
+            let src = start_addr as *const u8;
+            unsafe {
+                copy(src, target_addr as *mut u8, len as usize);
+            }
+            target_addr += len;
+
+            is_first = false;
+        }
+
+        Ok((target_addr - mem_addr) as usize)
     }
-    // END test
 
-    // INTERRUP.B:3590
+    fn fill_buffer(&mut self, disk_start_block: u64) {
+        let num_blocks = BUFFER_SECTIONS as u16;
+        self.fill_buffer_partial(disk_start_block, num_blocks);
+    }
+
+    /// `num_blocks` should be less than `BUFFER_SECTIONS`
+    fn fill_buffer_partial(&mut self, disk_start_block: u64, num_blocks: u16) {
+        let memory_address = &mut self.buffer.buf as *mut u8 as u16;
+        load_disk(
+            self.disk_number,
+            disk_start_block,
+            memory_address,
+            num_blocks,
+        );
+    }
+}
+
+fn load_disk(
+    disk_number: u16,
+    disk_start_block: u64,
+    memory_address: u16,
+    num_blocks: u16,
+) -> Result<(), Int13hError> {
+    // INTERRUP.B:3590 from inturrupt list
     let mut packet = DiskAddressPacket::new(disk_start_block, memory_address, num_blocks);
 
     // INT 13 op code for EXTENDED READ
@@ -211,8 +274,6 @@ fn load_disk(disk_number: u16, disk_start_block: u64, memory_address: u32, num_b
     // DS:SI disk address packet
     let si: *mut DiskAddressPacket = &mut packet;
     // println_vbe!("ds = 0x{:X}", ds as usize);
-
-    println_vbe!("packet addr = 0x{:X}", si as usize);
 
     unsafe {
         asm!(
@@ -231,33 +292,101 @@ fn load_disk(disk_number: u16, disk_start_block: u64, memory_address: u32, num_b
         );
     }
 
-    // let is_error = (ax & 0x00FF) == 1;
-    let is_error = (ax & 0xFF00) != 0;
-    if is_error {
-        panic!("error loading from disk (AH = 0x{:02X})", ax >> 8);
-    }
-    let blocks_transfered = packet.blocks;
-    println_vbe!("transfered {} blocks", blocks_transfered);
-    let hdr_addr_orig = BADFS_HEADER;
-    // let hdr_addr_new = memory_address as *mut [u8; 0x200];
-    let hdr_addr_new = memory_address as *mut [u8; 0x200];
-    unsafe {
-        println_vbe!("after:");
-        println_vbe!("{:X?}", &(&(*hdr_addr_orig))[0..10]);
-        println_vbe!("{:X?}", &(&(*hdr_addr_new))[0..10]);
-        let hdr_orig = badfs::header::HeaderDef::read(&*hdr_addr_orig).unwrap();
-        let hdr_new = badfs::header::HeaderDef::read(&*hdr_addr_new).unwrap();
-        if hdr_new != hdr_orig {
-            println_vbe!("headers not equal");
-        } else {
-            println_vbe!("headers equal");
-        }
+    if let Some(err) = Int13hError::from_ax(ax) {
+        Err(err)
+    } else {
+        Ok(())
     }
 }
 
-enum Int13hResult {
-    Success = 0x00,
-    InvalidFunction = 0x01,
+#[repr(u8)]
+enum Int13hError {
+    Unknown,
+    InvalidFunctionOrParam,           // 0x01
+    AddressMarkNotFound,              // 0x02
+    DiskWriteProtected,               // 0x03
+    SectorNotFoundReadError,          // 0x04
+    ResetFailed,                      // 0x05
+    DataDidNotVerify,                 // 0x05
+    DiskChanged,                      // 0x06
+    DriveParameterActivityFailed,     // 0x07
+    DMAOverrun,                       // 0x08
+    DataBoundaryError,                // 0x09
+    BadSectorDetected,                // 0x0A
+    BadTrackDetected,                 // 0x0B
+    UnsupportedTrackOrInvalidMedia,   // 0x0C
+    InvalidNumberOfSectorsOnFormat,   // 0x0D
+    ControlDataAddressMarkDetected,   // 0x0E
+    DMAArbitrationLevelOutOfRange,    // 0x0F
+    UncorrectableCRCOrECCErrorOnRead, // 0x10
+    DataECCCorrected,                 // 0x11
+    ControllerFailure,                // 0x20
+    NoMediaInDrive,                   // 0x31
+    IncorrectDriveTypeStoredInCMOS,   // 0x32
+    SeekFailed,                       // 0x40
+    Timeout,                          // 0x80
+    DriveNotReady,                    // 0xAA
+    VolumeNotLockedInDrive,           // 0xB0
+    VolumeLockedInDrive,              // 0xB1
+    VolumeNotRemovable,               // 0xB2
+    VolumeInUse,                      // 0xB3
+    LockCountExceeded,                // 0xB4
+    ValidEjectRequestFailed,          // 0xB5
+    VolumePresentButReadProtected,    // 0xB6
+    UndefinedError,                   // 0xBB
+    WriteFault,                       // 0xCC
+    StatusRegisterError,              // 0xE0
+    SenseOperationFailed,             // 0xFF
+}
+
+impl Int13hError {
+    fn from_ax(ax: u16) -> Option<Self> {
+        let ah = (ax >> 8) as u8;
+        if ah == 0 {
+            return None;
+        }
+
+        let err = match ah {
+            0x01 => Self::InvalidFunctionOrParam,
+            0x02 => Self::AddressMarkNotFound,
+            0x03 => Self::DiskWriteProtected,
+            0x04 => Self::SectorNotFoundReadError,
+            0x05 => Self::ResetFailed,
+            0x05 => Self::DataDidNotVerify,
+            0x06 => Self::DiskChanged,
+            0x07 => Self::DriveParameterActivityFailed,
+            0x08 => Self::DMAOverrun,
+            0x09 => Self::DataBoundaryError,
+            0x0A => Self::BadSectorDetected,
+            0x0B => Self::BadTrackDetected,
+            0x0C => Self::UnsupportedTrackOrInvalidMedia,
+            0x0D => Self::InvalidNumberOfSectorsOnFormat,
+            0x0E => Self::ControlDataAddressMarkDetected,
+            0x0F => Self::DMAArbitrationLevelOutOfRange,
+            0x10 => Self::UncorrectableCRCOrECCErrorOnRead,
+            0x11 => Self::DataECCCorrected,
+            0x20 => Self::ControllerFailure,
+            0x31 => Self::NoMediaInDrive,
+            0x32 => Self::IncorrectDriveTypeStoredInCMOS,
+            0x40 => Self::SeekFailed,
+            0x80 => Self::Timeout,
+            0xAA => Self::DriveNotReady,
+            0xB0 => Self::VolumeNotLockedInDrive,
+            0xB1 => Self::VolumeLockedInDrive,
+            0xB2 => Self::VolumeNotRemovable,
+            0xB3 => Self::VolumeInUse,
+            0xB4 => Self::LockCountExceeded,
+            0xB5 => Self::ValidEjectRequestFailed,
+            0xB6 => Self::VolumePresentButReadProtected,
+            0xBB => Self::UndefinedError,
+            0xCC => Self::WriteFault,
+            0xE0 => Self::StatusRegisterError,
+            0xFF => Self::SenseOperationFailed,
+            _ => Self::Unknown,
+        };
+
+        Some(err)
+    }
 }
 
 #[inline(never)]
