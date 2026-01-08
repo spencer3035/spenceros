@@ -6,9 +6,15 @@ edition = "2024"
 [dependencies]
 common = { path = "./bootloader/common/" }
 badfs = { git = "https://github.com/spencer3035/badfs", branch = "main" }
+# ovmf-prebuilt = "0.2.7"
+ovmf-prebuilt = "0.2.4"
 
 [build-dependencies]
 llvm-tools = "0.1.1"
+kernel = { path = "kernel", artifact = "bin", target = "x86_64-unknown-none" }
+# bootloader = "0.11.13"
+# bootloader = "0.11.12"
+bootloader = { path = "../../dev/git/bootloader"}
 
 [workspace]
 members = [ 
