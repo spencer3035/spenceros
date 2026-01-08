@@ -147,6 +147,7 @@ impl FrameBuffer for FramebufferInfo {
         self.shift_up_impl(rows);
     }
 }
+
 #[derive(Debug, Clone)]
 #[repr(C)]
 pub struct FramebufferInfo {
