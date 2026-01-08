@@ -2,45 +2,21 @@ use core::fmt::Write;
 
 use bootloader_api::{BootInfo, info::FrameBufferInfo};
 
-pub(crate) struct FrameBufferDisplay {
-    pub(crate) char_index: usize,
-    pub(crate) info: FrameBufferInfo,
-    pub(crate) buf: &'static mut [u8],
+const CHAR_WIDTH: u16 = 8;
+const CHAR_HEIGHT: u16 = 16;
+
+#[derive(Debug)]
+pub enum FrameBufferError {
+    #[allow(dead_code)]
+    NotEnoughBytesPerPixel(u8),
+    NoFramebufferFound,
 }
 
-impl FrameBufferDisplay {
-    pub(crate) fn new(boot_info: &'static mut BootInfo) -> Result<Self, FrameBufferError> {
-        let framebuffer = boot_info
-            .framebuffer
-            .as_mut()
-            .ok_or(FrameBufferError::NoFramebufferFound)?;
-        let info = framebuffer.info();
-        let buf = framebuffer.buffer_mut();
-        let fb = Self {
-            info,
-            buf,
-            char_index: 0,
-        };
-        fb.check()?;
-        // fb.info.bytes_per_pixel = 3;
-        Ok(fb)
-    }
-
-    pub(crate) fn write_char_impl(&mut self, ch: char) -> core::fmt::Result {
-        let chars_per_col = self.width() / CHAR_WIDTH;
-        let chars_per_row = self.height() / CHAR_HEIGHT;
-        let num_chars = chars_per_row * chars_per_col;
-        self.char_index += 1;
-        if self.char_index >= num_chars as usize {
-            self.shift_up(CHAR_HEIGHT);
-            self.char_index -= chars_per_row as usize;
-        }
-
-        let x = self.char_index as u16 % chars_per_row;
-        let y = self.char_index as u16 / chars_per_col;
-        let ch = if ch.is_ascii() { ch as u8 } else { 137 };
-        self.set_char(x, y, ch)
-    }
+pub struct FrameBufferDisplay {
+    pub char_index_x: usize,
+    pub char_index_y: usize,
+    pub info: FrameBufferInfo,
+    pub buf: &'static mut [u8],
 }
 
 impl Write for FrameBufferDisplay {
@@ -52,9 +28,153 @@ impl Write for FrameBufferDisplay {
     }
 }
 
-pub(crate) const CHAR_WIDTH: u16 = 8;
+impl FrameBufferDisplay {
+    pub fn new(boot_info: &'static mut BootInfo) -> Result<Self, FrameBufferError> {
+        let framebuffer = boot_info
+            .framebuffer
+            .as_mut()
+            .ok_or(FrameBufferError::NoFramebufferFound)?;
+        let info = framebuffer.info();
+        let buf = framebuffer.buffer_mut();
+        let fb = Self {
+            info,
+            buf,
+            char_index_x: 0,
+            char_index_y: 0,
+        };
+        fb.check()?;
+        Ok(fb)
+    }
 
-pub(crate) const CHAR_HEIGHT: u16 = 16;
+    fn write_char_impl(&mut self, ch: char) -> core::fmt::Result {
+        match ch {
+            '\n' => {
+                self.char_index_y += 1;
+                self.char_index_x = 0;
+            }
+            '\r' => {
+                self.char_index_x = 0;
+            }
+            c => {
+                let c = if c.is_ascii() { c as u8 } else { 137 };
+                self.set_char(self.char_index_x as u16, self.char_index_y as u16, c)?;
+            }
+        }
+
+        let chars_per_col = self.width() / CHAR_WIDTH;
+        let chars_per_row = self.height() / CHAR_HEIGHT;
+
+        self.char_index_x += 1;
+        if self.char_index_x >= chars_per_col as usize {
+            self.char_index_x = 0;
+            self.char_index_y += 1;
+        }
+
+        if self.char_index_y >= chars_per_row as usize {
+            self.shift_up(CHAR_HEIGHT);
+            self.char_index_y = chars_per_row as usize - 1;
+        }
+
+        Ok(())
+    }
+
+    fn check(&self) -> Result<(), FrameBufferError> {
+        match self.info.pixel_format {
+            bootloader_api::info::PixelFormat::Rgb => {
+                if self.info.bytes_per_pixel < 3 {
+                    return Err(FrameBufferError::NotEnoughBytesPerPixel(
+                        self.info.bytes_per_pixel as u8,
+                    ));
+                }
+            }
+            bootloader_api::info::PixelFormat::Bgr => {
+                if self.info.bytes_per_pixel < 3 {
+                    return Err(FrameBufferError::NotEnoughBytesPerPixel(
+                        self.info.bytes_per_pixel as u8,
+                    ));
+                }
+            }
+            bootloader_api::info::PixelFormat::U8 => todo!(),
+            bootloader_api::info::PixelFormat::Unknown {
+                red_position: _,
+                green_position: _,
+                blue_position: _,
+            } => todo!(),
+            _ => todo!(),
+        }
+
+        Ok(())
+    }
+    fn shift_up_impl(&mut self, rows: u16) {
+        let bytes_per_row = self.info.bytes_per_pixel * self.width() as usize;
+        for row in 0..(self.height().saturating_sub(rows)) {
+            let dst_offset = row as usize * self.info.stride * self.info.bytes_per_pixel;
+            let src_offset = (row + rows) as usize * self.info.stride * self.info.bytes_per_pixel;
+
+            self.buf.copy_within(src_offset..bytes_per_row, dst_offset);
+        }
+
+        // Set last `rows` rows to black
+        for ii in 0..rows.min(self.height()) {
+            let dst_offset = self.info.stride
+                * self.info.bytes_per_pixel
+                * self.height().saturating_sub(ii).saturating_sub(1) as usize;
+            self.buf[dst_offset..].fill(0);
+        }
+    }
+
+    fn get_pixel_address(&mut self, x: u16, y: u16) -> &mut [u8] {
+        let pixel_offset = y as usize * self.info.stride + x as usize;
+        let byte_offset = pixel_offset * self.info.bytes_per_pixel;
+        let end = byte_offset + self.info.bytes_per_pixel;
+        &mut self.buf[byte_offset..end]
+    }
+
+    /// Sets the given pixel a color, returns false if pixel is out of range
+    fn set_pixel_impl(&mut self, x: u16, y: u16, color: &Color) -> bool {
+        if x >= self.width() || y >= self.height() {
+            panic!("bad pixel position {x}, {y}");
+            //return false;
+        }
+
+        match self.info.pixel_format {
+            bootloader_api::info::PixelFormat::Rgb => {
+                let pixel = self.get_pixel_address(x, y);
+                // TODO: Check mask
+                pixel[0] = color.r;
+                pixel[1] = color.g;
+                pixel[2] = color.b;
+            }
+            bootloader_api::info::PixelFormat::Bgr => {
+                let pixel = self.get_pixel_address(x, y);
+                pixel[0] = color.b;
+                pixel[1] = color.g;
+                pixel[2] = color.r;
+            }
+            bootloader_api::info::PixelFormat::U8 => todo!(),
+            bootloader_api::info::PixelFormat::Unknown {
+                red_position: _,
+                green_position: _,
+                blue_position: _,
+            } => todo!(),
+            _ => todo!(),
+        }
+
+        true
+    }
+
+    /// Sets the given pixel a color, returns false if pixel is out of range
+    fn clear_impl(&mut self) {
+        let bytes_per_line = self.width() as usize * self.info.bytes_per_pixel;
+
+        let mut ii = 0;
+        for _jj in 0..self.height() {
+            let end = ii + bytes_per_line;
+            self.buf[ii..end].fill(0);
+            ii += self.info.stride * self.info.bytes_per_pixel;
+        }
+    }
+}
 
 pub trait FrameBuffer {
     /// Gets number of pixels wide the screen is
@@ -95,11 +215,32 @@ pub trait FrameBuffer {
     }
 }
 
+impl FrameBuffer for FrameBufferDisplay {
+    fn width(&self) -> u16 {
+        self.info.width as u16
+    }
+    fn height(&self) -> u16 {
+        self.info.height as u16
+    }
+    fn set_pixel(&mut self, x: u16, y: u16, c: &Color) -> bool {
+        self.set_pixel_impl(x, y, c)
+    }
+    fn clear(&mut self) {
+        self.clear_impl()
+    }
+    fn font(&self) -> &'static [u8; 0x1000] {
+        &crate::font::DECO_8X16_FONT
+    }
+    fn shift_up(&mut self, rows: u16) {
+        self.shift_up_impl(rows);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Color {
-    pub(crate) r: u8,
-    pub(crate) g: u8,
-    pub(crate) b: u8,
+    r: u8,
+    g: u8,
+    b: u8,
 }
 
 impl Color {
@@ -135,132 +276,5 @@ impl Color {
 
     pub fn new(r: u8, g: u8, b: u8) -> Self {
         Color { r, g, b }
-    }
-}
-
-impl FrameBuffer for FrameBufferDisplay {
-    fn width(&self) -> u16 {
-        self.info.width as u16
-    }
-    fn height(&self) -> u16 {
-        self.info.height as u16
-    }
-    fn set_pixel(&mut self, x: u16, y: u16, c: &Color) -> bool {
-        self.set_pixel_impl(x, y, c)
-    }
-    fn clear(&mut self) {
-        self.clear_impl()
-    }
-    fn font(&self) -> &'static [u8; 0x1000] {
-        &crate::font::DECO_8X16_FONT
-    }
-    fn shift_up(&mut self, rows: u16) {
-        self.shift_up_impl(rows);
-    }
-}
-
-#[derive(Debug)]
-pub(crate) enum FrameBufferError {
-    #[allow(dead_code)]
-    NotEnoughBytesPerPixel(u8),
-    NoFramebufferFound,
-}
-
-impl FrameBufferDisplay {
-    pub(crate) fn check(&self) -> Result<(), FrameBufferError> {
-        match self.info.pixel_format {
-            bootloader_api::info::PixelFormat::Rgb => {
-                if self.info.bytes_per_pixel < 3 {
-                    return Err(FrameBufferError::NotEnoughBytesPerPixel(
-                        self.info.bytes_per_pixel as u8,
-                    ));
-                }
-            }
-            bootloader_api::info::PixelFormat::Bgr => {
-                if self.info.bytes_per_pixel < 3 {
-                    return Err(FrameBufferError::NotEnoughBytesPerPixel(
-                        self.info.bytes_per_pixel as u8,
-                    ));
-                }
-            }
-            bootloader_api::info::PixelFormat::U8 => todo!(),
-            bootloader_api::info::PixelFormat::Unknown {
-                red_position: _,
-                green_position: _,
-                blue_position: _,
-            } => todo!(),
-            _ => todo!(),
-        }
-
-        Ok(())
-    }
-    pub(crate) fn shift_up_impl(&mut self, rows: u16) {
-        let bytes_per_row = self.info.bytes_per_pixel * self.width() as usize;
-        for row in 0..(self.height().saturating_sub(rows)) {
-            let dst_offset = row as usize * self.info.stride * self.info.bytes_per_pixel;
-            let src_offset = (row + rows) as usize * self.info.stride * self.info.bytes_per_pixel;
-
-            self.buf.copy_within(src_offset..bytes_per_row, dst_offset);
-        }
-
-        // Set last `rows` rows to black
-        for ii in 0..rows.min(self.height()) {
-            let dst_offset = self.info.stride
-                * self.info.bytes_per_pixel
-                * self.height().saturating_sub(ii).saturating_sub(1) as usize;
-            self.buf[dst_offset..].fill(0);
-        }
-    }
-
-    pub(crate) fn get_pixel_address(&mut self, x: u16, y: u16) -> &mut [u8] {
-        let pixel_offset = y as usize * self.info.stride + x as usize;
-        let byte_offset = pixel_offset * self.info.bytes_per_pixel;
-        let end = byte_offset + self.info.bytes_per_pixel;
-        &mut self.buf[byte_offset..end]
-    }
-
-    /// Sets the given pixel a color, returns false if pixel is out of range
-    pub(crate) fn set_pixel_impl(&mut self, x: u16, y: u16, color: &Color) -> bool {
-        if x >= self.width() || y >= self.height() {
-            panic!("bad pixel position {x}, {y}");
-            //return false;
-        }
-
-        match self.info.pixel_format {
-            bootloader_api::info::PixelFormat::Rgb => {
-                let pixel = self.get_pixel_address(x, y);
-                // TODO: Check mask
-                pixel[0] = color.r;
-                pixel[1] = color.g;
-                pixel[2] = color.b;
-            }
-            bootloader_api::info::PixelFormat::Bgr => {
-                let pixel = self.get_pixel_address(x, y);
-                pixel[0] = color.b;
-                pixel[1] = color.g;
-                pixel[2] = color.r;
-            }
-            bootloader_api::info::PixelFormat::U8 => todo!(),
-            bootloader_api::info::PixelFormat::Unknown {
-                red_position: _,
-                green_position: _,
-                blue_position: _,
-            } => todo!(),
-            _ => todo!(),
-        }
-
-        true
-    }
-
-    /// Sets the given pixel a color, returns false if pixel is out of range
-    pub(crate) fn clear_impl(&mut self) {
-        let bytes_per_line = self.width() as usize * self.info.bytes_per_pixel;
-
-        let mut ii = 0;
-        for _jj in 0..self.height() {
-            let end = ii + bytes_per_line;
-            self.buf[ii..end].fill(0);
-            ii += self.info.stride * self.info.bytes_per_pixel;
-        }
     }
 }

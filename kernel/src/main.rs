@@ -42,21 +42,25 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     writeln!(port, "Entered kernel with boot info: {boot_info:#?}").unwrap();
 
     let mut fb = framebuffer::FrameBufferDisplay::new(boot_info).unwrap();
+    fb.clear();
 
+    // Make boarder
     for y in 0..fb.height() {
-        for x in 0..fb.width() {
-            fb.set_pixel(x, y, &framebuffer::Color::BLACK);
-        }
+        fb.set_pixel(0, y, &framebuffer::Color::WHITE);
+        fb.set_pixel(fb.width() - 1, y, &framebuffer::Color::WHITE);
+    }
+    for x in 0..fb.width() {
+        fb.set_pixel(x, 0, &framebuffer::Color::WHITE);
+        fb.set_pixel(x, fb.height() - 1, &framebuffer::Color::WHITE);
     }
 
-    for ii in 0..(fb.width().min(fb.height())) {
-        match ii % 3 {
-            0 => fb.set_pixel(ii, ii, &framebuffer::Color::RED),
-            1 => fb.set_pixel(ii, ii, &framebuffer::Color::GREEN),
-            2 => fb.set_pixel(ii, ii, &framebuffer::Color::BLUE),
-            _ => unreachable!(),
-        };
-        // fb.set_pixel(ii, ii, &Color::WHITE);
+    // Make diagonal line
+    // for ii in 0..(fb.width().min(fb.height())) {
+    //     fb.set_pixel(ii, ii, &framebuffer::Color::WHITE);
+    // }
+
+    for _ii in 0..100 {
+        write!(fb, "Hello, my name is [NAME]. ").unwrap();
     }
 
     // for ii in 0..fb.width() / 2 {
