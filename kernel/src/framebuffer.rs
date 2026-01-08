@@ -46,6 +46,22 @@ impl FrameBufferDisplay {
         Ok(fb)
     }
 
+    pub fn backspace(&mut self) -> core::fmt::Result {
+        if self.char_index_x > 0 {
+            self.char_index_x -= 1;
+        } else if self.char_index_y > 0 {
+            self.char_index_y -= 1;
+            let chars_per_col = self.width() / CHAR_WIDTH;
+            self.char_index_x = chars_per_col as usize - 1;
+        } else {
+            // At beginning of screen
+            return Ok(());
+        }
+        self.clear_char(self.char_index_x as u16, self.char_index_y as u16)?;
+
+        Ok(())
+    }
+
     fn write_char_impl(&mut self, ch: char) -> core::fmt::Result {
         match ch {
             '\n' => {
@@ -54,17 +70,18 @@ impl FrameBufferDisplay {
             }
             '\r' => {
                 self.char_index_x = 0;
+                return Ok(());
             }
             c => {
                 let c = if c.is_ascii() { c as u8 } else { 137 };
                 self.set_char(self.char_index_x as u16, self.char_index_y as u16, c)?;
+                self.char_index_x += 1;
             }
         }
 
         let chars_per_col = self.width() / CHAR_WIDTH;
         let chars_per_row = self.height() / CHAR_HEIGHT;
 
-        self.char_index_x += 1;
         if self.char_index_x >= chars_per_col as usize {
             self.char_index_x = 0;
             self.char_index_y += 1;
@@ -131,10 +148,11 @@ impl FrameBufferDisplay {
     }
 
     /// Sets the given pixel a color, returns false if pixel is out of range
-    fn set_pixel_impl(&mut self, x: u16, y: u16, color: &Color) -> bool {
+    fn set_pixel_impl(&mut self, x: u16, y: u16, color: &Color) -> core::fmt::Result {
         if x >= self.width() || y >= self.height() {
-            panic!("bad pixel position {x}, {y}");
+            // panic!("bad pixel position {x}, {y}");
             //return false;
+            return Err(core::fmt::Error);
         }
 
         match self.info.pixel_format {
@@ -160,7 +178,7 @@ impl FrameBufferDisplay {
             _ => todo!(),
         }
 
-        true
+        Ok(())
     }
 
     /// Sets the given pixel a color, returns false if pixel is out of range
@@ -182,13 +200,30 @@ pub trait FrameBuffer {
     /// Gets number of pixels high the screen is
     fn height(&self) -> u16;
     /// Sets the given pixel the given color
-    fn set_pixel(&mut self, x: u16, y: u16, c: &Color) -> bool;
+    fn set_pixel(&mut self, x: u16, y: u16, c: &Color) -> core::fmt::Result;
     /// Clears the screen (sets to black)
     fn clear(&mut self);
     /// Gets font bitmap
     fn font(&self) -> &'static [u8; 0x1000];
     /// Shifts up rows by given number of pixels
     fn shift_up(&mut self, rows: u16);
+    /// Sets a box given by two corners to the given color
+    fn set_box(
+        &mut self,
+        x: u16,
+        y: u16,
+        width: u16,
+        height: u16,
+        c: &Color,
+    ) -> Result<(), core::fmt::Error> {
+        for xx in x..(x + width) {
+            for yy in y..(y + height) {
+                self.set_pixel(xx, yy, c)?;
+            }
+        }
+
+        Ok(())
+    }
     /// Sets the characer at the given position (in units of characters)
     fn set_char(&mut self, x: u16, y: u16, c: u8) -> Result<(), core::fmt::Error> {
         if (x + 1) * CHAR_WIDTH > self.width() || (y + 1) * CHAR_HEIGHT > self.height() {
@@ -204,7 +239,7 @@ pub trait FrameBuffer {
                 if mask & 1 != 0 {
                     let x_px = CHAR_WIDTH * x + 7 - shift;
                     let y_px = CHAR_HEIGHT * y + ii as u16;
-                    self.set_pixel(x_px, y_px, &Color::WHITE);
+                    self.set_pixel(x_px, y_px, &Color::WHITE)?;
                 }
                 shift += 1;
                 mask >>= 1;
@@ -212,6 +247,16 @@ pub trait FrameBuffer {
         }
 
         Ok(())
+    }
+    fn clear_char(&mut self, x: u16, y: u16) -> core::fmt::Result {
+        if (x + 1) * CHAR_WIDTH > self.width() || (y + 1) * CHAR_HEIGHT > self.height() {
+            // panic!("Bad char position {x},{y}");
+            return Err(core::fmt::Error);
+        }
+
+        let x_px = CHAR_WIDTH * x;
+        let y_px = CHAR_HEIGHT * y;
+        self.set_box(x_px, y_px, CHAR_WIDTH, CHAR_HEIGHT, &Color::BLACK)
     }
 }
 
@@ -222,7 +267,7 @@ impl FrameBuffer for FrameBufferDisplay {
     fn height(&self) -> u16 {
         self.info.height as u16
     }
-    fn set_pixel(&mut self, x: u16, y: u16, c: &Color) -> bool {
+    fn set_pixel(&mut self, x: u16, y: u16, c: &Color) -> core::fmt::Result {
         self.set_pixel_impl(x, y, c)
     }
     fn clear(&mut self) {

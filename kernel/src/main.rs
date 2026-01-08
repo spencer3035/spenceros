@@ -8,6 +8,7 @@ use crate::framebuffer::FrameBuffer as _;
 
 pub mod font;
 pub mod framebuffer;
+pub mod keyboard_ps_2;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -46,12 +47,30 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 
     // Make boarder
     for y in 0..fb.height() {
-        fb.set_pixel(0, y, &framebuffer::Color::WHITE);
-        fb.set_pixel(fb.width() - 1, y, &framebuffer::Color::WHITE);
+        fb.set_pixel(0, y, &framebuffer::Color::WHITE).unwrap();
+        fb.set_pixel(fb.width() - 1, y, &framebuffer::Color::WHITE)
+            .unwrap();
     }
     for x in 0..fb.width() {
-        fb.set_pixel(x, 0, &framebuffer::Color::WHITE);
-        fb.set_pixel(x, fb.height() - 1, &framebuffer::Color::WHITE);
+        fb.set_pixel(x, 0, &framebuffer::Color::WHITE).unwrap();
+        fb.set_pixel(x, fb.height() - 1, &framebuffer::Color::WHITE)
+            .unwrap();
+    }
+
+    let mut kb = keyboard_ps_2::KeyboardDriver::new();
+    loop {
+        let key = kb.next_keypress();
+        if key.is_backspace() {
+            fb.backspace().unwrap();
+        } else if key.is_enter() {
+            writeln!(fb).unwrap();
+        } else if key.is_char() {
+            if let Some(ch) = kb.modify_key_to_char(key) {
+                write!(fb, "{ch}").unwrap();
+            }
+        } else {
+            writeln!(fb, "not sure what to do with {key:?}").unwrap();
+        }
     }
 
     // Make diagonal line
@@ -59,9 +78,9 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     //     fb.set_pixel(ii, ii, &framebuffer::Color::WHITE);
     // }
 
-    for _ii in 0..100 {
-        write!(fb, "Hello, my name is [NAME]. ").unwrap();
-    }
+    // for _ii in 0..100 {
+    //     write!(fb, "Hello, my name is [NAME]. ").unwrap();
+    // }
 
     // for ii in 0..fb.width() / 2 {
     //     for jj in 0..fb.height() / 2 {

@@ -15,8 +15,9 @@ impl KeyboardDriver {
     pub fn new() -> Self {
         Self::default()
     }
+
     #[allow(dead_code)]
-    pub fn has_keypress(&self) -> bool {
+    pub fn has_event(&self) -> bool {
         has_scancode()
     }
 
@@ -24,29 +25,34 @@ impl KeyboardDriver {
     pub fn next_char(&mut self) -> char {
         loop {
             let kc = self.next_keypress();
-            // let maybe_char = kc.to_char_upper();
-            let maybe_char = if self.shift_held {
-                kc.to_char_upper()
-            } else {
-                kc.to_char_lower()
-            };
-
-            if let Some(ch) = maybe_char {
+            if let Some(ch) = self.modify_key_to_char(kc) {
                 return ch;
             }
         }
     }
 
+    pub fn next_key_event(&mut self) -> KeyEvent {
+        wait_key_event()
+    }
+
+    pub fn modify_key_to_char(&self, key: KeyCode) -> Option<char> {
+        if self.shift_held {
+            key.to_char_upper()
+        } else {
+            key.to_char_lower()
+        }
+    }
+
     #[allow(dead_code)]
     pub fn next_keypress(&mut self) -> KeyCode {
-        let mut kc = wait_key_event();
+        let mut kc = self.next_key_event();
         loop {
             if let Some(modi) = kc.code.is_modifier() {
                 self.handle_modifier(modi, kc.is_press);
             } else if kc.is_press {
                 return kc.code;
             }
-            kc = wait_key_event();
+            kc = self.next_key_event();
         }
     }
 
@@ -147,9 +153,9 @@ pub trait FromScancodes: Sized {
     /// Gets the scancode given the terminal code and the number of codes, as well as if it is a
     /// down press or not (_, true) is downpress, (_, false) is a release.
     fn from_scancode_and_depth(code: u8, index: u8) -> Option<(Self, bool)>;
-    /// Tries to conver the key to an unshifted character
+    /// Tries to convert the key to an unshifted character
     fn to_char_lower(&self) -> Option<char>;
-    /// Tries to conver the key to a shifted character
+    /// Tries to convert the key to a shifted character
     fn to_char_upper(&self) -> Option<char>;
 }
 
@@ -176,6 +182,9 @@ impl KeyCode {
             None
         }
     }
+    pub fn is_backspace(&self) -> bool {
+        *self == KeyCode::KcBackspace
+    }
     pub fn is_shift(&self) -> bool {
         *self == KeyCode::KcLeftShift || *self == KeyCode::KcRightShift
     }
@@ -191,6 +200,10 @@ impl KeyCode {
     }
     pub fn is_gui(&self) -> bool {
         *self == KeyCode::KcLeftGui || *self == KeyCode::KcRightGui
+    }
+
+    pub fn is_char(&self) -> bool {
+        self.to_char_lower().is_some()
     }
 }
 
