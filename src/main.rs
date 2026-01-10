@@ -24,6 +24,8 @@ fn main() {
         _ => {
             eprintln!("defaulting to uefi");
             true
+            // eprintln!("defaulting to bios");
+            // false
         }
     };
 
@@ -35,6 +37,8 @@ fn main() {
     // enable the guest to exit qemu
     cmd.arg("-device")
         .arg("isa-debug-exit,iobase=0xf4,iosize=0x04");
+
+    cmd.arg("-m").arg("size=2G");
 
     if uefi {
         let prebuilt =

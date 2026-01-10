@@ -1,16 +1,11 @@
 use core::fmt::Write;
 
-use bootloader_api::{BootInfo, info::FrameBufferInfo};
+use bootloader_api::info::FrameBufferInfo;
+
+use crate::BiosInfoError;
 
 const CHAR_WIDTH: u16 = 8;
 const CHAR_HEIGHT: u16 = 16;
-
-#[derive(Debug)]
-pub enum FrameBufferError {
-    #[allow(dead_code)]
-    NotEnoughBytesPerPixel(u8),
-    NoFramebufferFound,
-}
 
 pub struct FrameBufferDisplay {
     pub char_index_x: usize,
@@ -29,13 +24,15 @@ impl Write for FrameBufferDisplay {
 }
 
 impl FrameBufferDisplay {
-    pub fn new(boot_info: &'static mut BootInfo) -> Result<Self, FrameBufferError> {
-        let framebuffer = boot_info
-            .framebuffer
-            .as_mut()
-            .ok_or(FrameBufferError::NoFramebufferFound)?;
+    /// Make a new framebuffer from the boot info
+    ///
+    /// # Safety
+    ///
+    /// This mutably modifies the data in the framebuffer. The caller needs to ensure that no other
+    /// function or method modifies or accesses `boot_info.framebuffer.as_ref().buffer`.
+    pub fn new(framebuffer: bootloader_api::info::FrameBuffer) -> Result<Self, BiosInfoError> {
         let info = framebuffer.info();
-        let buf = framebuffer.buffer_mut();
+        let buf = framebuffer.into_buffer();
         let fb = Self {
             info,
             buf,
@@ -95,18 +92,18 @@ impl FrameBufferDisplay {
         Ok(())
     }
 
-    fn check(&self) -> Result<(), FrameBufferError> {
+    fn check(&self) -> Result<(), BiosInfoError> {
         match self.info.pixel_format {
             bootloader_api::info::PixelFormat::Rgb => {
                 if self.info.bytes_per_pixel < 3 {
-                    return Err(FrameBufferError::NotEnoughBytesPerPixel(
+                    return Err(BiosInfoError::NotEnoughBytesPerPixel(
                         self.info.bytes_per_pixel as u8,
                     ));
                 }
             }
             bootloader_api::info::PixelFormat::Bgr => {
                 if self.info.bytes_per_pixel < 3 {
-                    return Err(FrameBufferError::NotEnoughBytesPerPixel(
+                    return Err(BiosInfoError::NotEnoughBytesPerPixel(
                         self.info.bytes_per_pixel as u8,
                     ));
                 }
@@ -128,7 +125,8 @@ impl FrameBufferDisplay {
             let dst_offset = row as usize * self.info.stride * self.info.bytes_per_pixel;
             let src_offset = (row + rows) as usize * self.info.stride * self.info.bytes_per_pixel;
 
-            self.buf.copy_within(src_offset..bytes_per_row, dst_offset);
+            self.buf
+                .copy_within(src_offset..(src_offset + bytes_per_row), dst_offset);
         }
 
         // Set last `rows` rows to black
