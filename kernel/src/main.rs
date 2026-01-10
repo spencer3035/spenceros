@@ -4,17 +4,16 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
-use bootloader_api::{BootInfo, entry_point, info::MemoryRegionKind};
-use core::{
-    fmt::Write,
-    ops::{Deref, DerefMut},
-};
+use bootloader_api::{BootInfo, info::MemoryRegionKind};
+use core::fmt::Write;
 
 use crate::framebuffer::{FrameBuffer, FrameBufferDisplay};
 
+pub mod alloc;
 pub mod font;
 pub mod framebuffer;
 pub mod keyboard_ps_2;
+pub mod mem;
 pub mod prealloc_array;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,64 +42,17 @@ pub fn serial() -> uart_16550::SerialPort {
     port
 }
 
-const MEM_ENTRY_MAX: usize = 100;
-
+#[allow(dead_code)]
 struct MyBootInfo {
     framebuffer: Option<FrameBufferDisplay>,
     port: Option<uart_16550::SerialPort>,
     kernel_addr: u64,
     kernel_len: u64,
-    mem_info: MemInfo,
+    mem_info: mem::MemInfo,
 }
 
-pub trait PhysicalMemoryInfo {
-    fn entries(&self) -> impl Iterator<Item = &MemEntry>;
-}
-
-impl PhysicalMemoryInfo for MemInfo {
-    fn entries(&self) -> impl Iterator<Item = &MemEntry> {
-        self.iter()
-    }
-}
-
-#[derive(Debug, Default)]
-struct MemEntry {
-    start: u64,
-    end: u64,
-    usable: bool,
-}
-
-impl MemEntry {
-    const fn null() -> Self {
-        Self {
-            start: 0,
-            end: 0,
-            usable: false,
-        }
-    }
-}
-
-struct MemInfo {
-    mem_entries: [MemEntry; MEM_ENTRY_MAX],
-    mem_len: usize,
-}
-
-impl Deref for MemInfo {
-    type Target = [MemEntry];
-
-    fn deref(&self) -> &Self::Target {
-        &self.mem_entries[0..self.mem_len]
-    }
-}
-
-impl DerefMut for MemInfo {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.mem_entries[0..self.mem_len]
-    }
-}
-
-fn parse_mem_info(info: &'static BootInfo) -> Result<MemInfo, BiosInfoError> {
-    let mut arr = [const { MemEntry::null() }; MEM_ENTRY_MAX];
+fn parse_mem_info(info: &'static BootInfo) -> Result<mem::MemInfo, BiosInfoError> {
+    let mut arr = [const { mem::MemEntry::null() }; mem::MEM_ENTRY_MAX];
     let mut ii = 0;
     for entry in info.memory_regions.iter() {
         let is_usable = matches!(entry.kind, MemoryRegionKind::Usable);
@@ -129,12 +81,12 @@ fn parse_mem_info(info: &'static BootInfo) -> Result<MemInfo, BiosInfoError> {
             ii += 1;
         }
 
-        if ii >= MEM_ENTRY_MAX {
+        if ii >= mem::MEM_ENTRY_MAX {
             return Err(BiosInfoError::TooManyMemEntries);
         }
     }
 
-    Ok(MemInfo {
+    Ok(mem::MemInfo {
         mem_entries: arr,
         mem_len: ii,
     })
@@ -169,92 +121,12 @@ fn parse_boot_info(info: &'static mut BootInfo) -> Result<MyBootInfo, BiosInfoEr
 }
 
 #[cfg(not(test))]
-entry_point!(kernel_main);
+bootloader_api::entry_point!(kernel_main);
 #[allow(unused)]
 fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     let info = parse_boot_info(boot_info).unwrap();
     main_inner(info);
     exit_qemu(QemuExitCode::Success);
-}
-
-/// Maps physical memory addesses to a continuous range
-pub struct PhysicalMemoryMapper<M>
-where
-    M: PhysicalMemoryInfo,
-{
-    memory_map: M,
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct PhysicalAddr(u64);
-#[derive(Debug)]
-pub struct VirtualAddr(u64);
-
-impl<M> PhysicalMemoryMapper<M>
-where
-    M: PhysicalMemoryInfo,
-{
-    pub fn new(mem: M) -> Self {
-        Self { memory_map: mem }
-    }
-    pub fn map(&self, addr: VirtualAddr) -> Option<PhysicalAddr> {
-        #[cfg(test)]
-        println!("Mapping {addr:?}");
-
-        let mut prev_section_break = 0;
-        for entry in self.memory_map.entries() {
-            #[cfg(test)]
-            dbg!(&entry, prev_section_break);
-            let section_length = entry.end - entry.start;
-            if prev_section_break <= addr.0 && addr.0 < prev_section_break + section_length {
-                let phys_addr = addr.0 - prev_section_break + entry.start;
-                return Some(PhysicalAddr(phys_addr));
-            }
-            #[cfg(test)]
-            dbg!(section_length);
-            prev_section_break += section_length;
-        }
-
-        None
-    }
-}
-
-#[test]
-fn test_phys_mem_map() {
-    struct Info {
-        entries: Vec<MemEntry>,
-    }
-    impl PhysicalMemoryInfo for Info {
-        fn entries(&self) -> impl Iterator<Item = &MemEntry> {
-            self.entries.iter()
-        }
-    }
-    let info = Info {
-        entries: vec![
-            MemEntry {
-                start: 100,
-                end: 200,
-                usable: true,
-            },
-            MemEntry {
-                start: 400,
-                end: 500,
-                usable: true,
-            },
-            MemEntry {
-                start: 600,
-                end: 700,
-                usable: true,
-            },
-        ],
-    };
-
-    let pmm = PhysicalMemoryMapper::new(info);
-
-    assert_eq!(pmm.map(VirtualAddr(0)), Some(PhysicalAddr(100)));
-    assert_eq!(pmm.map(VirtualAddr(100)), Some(PhysicalAddr(400)));
-    assert_eq!(pmm.map(VirtualAddr(250)), Some(PhysicalAddr(650)));
-    assert_eq!(pmm.map(VirtualAddr(500)), None);
 }
 
 fn main_inner(mut info: MyBootInfo) {

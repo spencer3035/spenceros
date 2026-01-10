@@ -8,6 +8,7 @@ common = { path = "./bootloader/common/" }
 badfs = { git = "https://github.com/spencer3035/badfs", branch = "main" }
 # ovmf-prebuilt = "0.2.7"
 ovmf-prebuilt = "0.2.4"
+derive_more = { version = "2.1.1", default-features = false, features = ["add", "add_assign", "mul", "mul_assign"] }
 
 [build-dependencies]
 llvm-tools = "0.1.1"
