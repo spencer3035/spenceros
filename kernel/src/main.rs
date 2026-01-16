@@ -4,7 +4,7 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(not(test), no_main)]
 
-use bootloader_api::{BootInfo, info::MemoryRegionKind};
+use bootloader_api::BootInfo;
 use core::{cell::UnsafeCell, fmt::Write, marker::PhantomData, sync::atomic::AtomicBool};
 
 use crate::framebuffer::{FrameBuffer, FrameBufferDisplay};
@@ -14,6 +14,7 @@ pub mod font;
 pub mod framebuffer;
 pub mod keyboard_ps_2;
 pub mod mem;
+pub mod mutex;
 pub mod prealloc_array;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,46 +87,6 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     let info = parse_boot_info(boot_info).unwrap();
     main_inner(info);
     exit_qemu(QemuExitCode::Success);
-}
-
-/// Always contains a lock and associated data
-struct MutexGuard<'a, T> {
-    mutex: &'a Mutex<T>,
-    marker: PhantomData<&'a mut T>,
-}
-
-impl<T> Drop for MutexGuard<T> {
-    fn drop(&mut self) {
-        unsafe {
-            self.lock.unlock();
-        }
-    }
-}
-
-struct Lock {
-    is_locked: AtomicBool,
-}
-
-impl Lock {
-    fn new() -> Self {
-        Self {
-            is_locked: AtomicBool::new(false),
-        }
-    }
-    fn lock(&self) {
-        self.is_locked
-            .store(true, core::sync::atomic::Ordering::SeqCst);
-    }
-    /// Need to guarentee the lock is currently held
-    unsafe fn unlock(&self) {
-        self.is_locked
-            .store(false, core::sync::atomic::Ordering::SeqCst);
-    }
-}
-
-struct Mutex<T> {
-    data: UnsafeCell<T>,
-    lock: AtomicBool,
 }
 
 fn main_inner(mut info: MyBootInfo) {
