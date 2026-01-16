@@ -8,7 +8,9 @@ use bootloader_api::BootInfo;
 use core::fmt::Write;
 
 use crate::{
+    alloc::BUDDY_ALLOCATOR,
     framebuffer::{FrameBuffer, FrameBufferDisplay},
+    mem::PhysicalMemoryRegion,
     mutex::Mutex,
 };
 
@@ -107,10 +109,34 @@ fn main_inner(mut info: MyBootInfo) {
 
     loggers::println!("test");
 
+    let mut buddy_alloc = BUDDY_ALLOCATOR.lock();
+
     println!("Memory entries:");
+    let mut prev = None;
     for entry in info.mem_info.iter() {
-        println!("{entry:X?}");
+        println_port!("{entry:X?}");
+
+        if let Some(prev) = prev
+            && entry.start != prev
+        {
+            // Address range not accessable
+            let start = prev as usize;
+            let end = entry.start as usize;
+            let size = end - start;
+            // println_port!("Reserving unaccessable 0x{start:X}, 0x{end:X}");
+            buddy_alloc.reserve_addr(start, size);
+        }
+
+        if !entry.usable {
+            let start = entry.start as usize;
+            let size = entry.len() as usize;
+            // let end = entry.end;
+            // println_port!("Reserving unusable 0x{start:X}, 0x{end:X}");
+            buddy_alloc.reserve_addr(start, size);
+        }
+        prev = Some(entry.end);
     }
+
     println!("kernel addr: 0x{:X}", info.kernel_addr);
 
     println!("Press any key to continue:");

@@ -14,10 +14,6 @@ pub fn parse_mem_info(
     let mut ii = 0;
     for entry in info.memory_regions.iter() {
         let is_usable = matches!(entry.kind, bootloader_api::info::MemoryRegionKind::Usable);
-        if !is_usable {
-            // We only care about usable memory
-            continue;
-        }
 
         if ii > 0 {
             // Not first entry
