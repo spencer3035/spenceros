@@ -7,6 +7,49 @@ use derive_more::AddAssign;
 
 pub const MEM_ENTRY_MAX: usize = 100;
 
+pub fn parse_mem_info(
+    info: &'static bootloader_api::BootInfo,
+) -> Result<MemInfo, crate::BiosInfoError> {
+    let mut arr = [const { MemEntry::null() }; MEM_ENTRY_MAX];
+    let mut ii = 0;
+    for entry in info.memory_regions.iter() {
+        let is_usable = matches!(entry.kind, bootloader_api::info::MemoryRegionKind::Usable);
+        if !is_usable {
+            // We only care about usable memory
+            continue;
+        }
+
+        if ii > 0 {
+            // Not first entry
+            if entry.start == arr[ii - 1].end && arr[ii - 1].usable == is_usable {
+                // Combine with previous entry
+                arr[ii - 1].end = entry.end;
+            } else {
+                // Make new entry
+                arr[ii].end = entry.end;
+                arr[ii].start = entry.start;
+                arr[ii].usable = is_usable;
+                ii += 1;
+            }
+        } else {
+            // First entry
+            arr[ii].end = entry.end;
+            arr[ii].start = entry.start;
+            arr[ii].usable = is_usable;
+            ii += 1;
+        }
+
+        if ii >= MEM_ENTRY_MAX {
+            return Err(crate::BiosInfoError::TooManyMemEntries);
+        }
+    }
+
+    Ok(MemInfo {
+        mem_entries: arr,
+        mem_len: ii,
+    })
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Add, AddAssign)]
 pub struct PhysicalAddr(pub u64);
 

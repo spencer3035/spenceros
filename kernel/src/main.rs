@@ -5,7 +5,7 @@
 #![cfg_attr(not(test), no_main)]
 
 use bootloader_api::{BootInfo, info::MemoryRegionKind};
-use core::fmt::Write;
+use core::{cell::UnsafeCell, fmt::Write, marker::PhantomData, sync::atomic::AtomicBool};
 
 use crate::framebuffer::{FrameBuffer, FrameBufferDisplay};
 
@@ -51,47 +51,6 @@ struct MyBootInfo {
     mem_info: mem::MemInfo,
 }
 
-fn parse_mem_info(info: &'static BootInfo) -> Result<mem::MemInfo, BiosInfoError> {
-    let mut arr = [const { mem::MemEntry::null() }; mem::MEM_ENTRY_MAX];
-    let mut ii = 0;
-    for entry in info.memory_regions.iter() {
-        let is_usable = matches!(entry.kind, MemoryRegionKind::Usable);
-        if !is_usable {
-            // We only care about usable memory
-            continue;
-        }
-
-        if ii > 0 {
-            // Not first entry
-            if entry.start == arr[ii - 1].end && arr[ii - 1].usable == is_usable {
-                // Combine with previous entry
-                arr[ii - 1].end = entry.end;
-            } else {
-                // Make new entry
-                arr[ii].end = entry.end;
-                arr[ii].start = entry.start;
-                arr[ii].usable = is_usable;
-                ii += 1;
-            }
-        } else {
-            // First entry
-            arr[ii].end = entry.end;
-            arr[ii].start = entry.start;
-            arr[ii].usable = is_usable;
-            ii += 1;
-        }
-
-        if ii >= mem::MEM_ENTRY_MAX {
-            return Err(BiosInfoError::TooManyMemEntries);
-        }
-    }
-
-    Ok(mem::MemInfo {
-        mem_entries: arr,
-        mem_len: ii,
-    })
-}
-
 #[derive(Debug)]
 pub enum BiosInfoError {
     #[allow(dead_code)]
@@ -109,7 +68,7 @@ fn parse_boot_info(info: &'static mut BootInfo) -> Result<MyBootInfo, BiosInfoEr
     fb.clear();
     // TODO: Check out workings of memory detection in BIOS. It doesn't seem to be detecting all
     // the avaliable memory
-    let mem_info = parse_mem_info(info)?;
+    let mem_info = mem::parse_mem_info(info)?;
 
     Ok(MyBootInfo {
         framebuffer: Some(fb),
@@ -127,6 +86,46 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
     let info = parse_boot_info(boot_info).unwrap();
     main_inner(info);
     exit_qemu(QemuExitCode::Success);
+}
+
+/// Always contains a lock and associated data
+struct MutexGuard<'a, T> {
+    mutex: &'a Mutex<T>,
+    marker: PhantomData<&'a mut T>,
+}
+
+impl<T> Drop for MutexGuard<T> {
+    fn drop(&mut self) {
+        unsafe {
+            self.lock.unlock();
+        }
+    }
+}
+
+struct Lock {
+    is_locked: AtomicBool,
+}
+
+impl Lock {
+    fn new() -> Self {
+        Self {
+            is_locked: AtomicBool::new(false),
+        }
+    }
+    fn lock(&self) {
+        self.is_locked
+            .store(true, core::sync::atomic::Ordering::SeqCst);
+    }
+    /// Need to guarentee the lock is currently held
+    unsafe fn unlock(&self) {
+        self.is_locked
+            .store(false, core::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+struct Mutex<T> {
+    data: UnsafeCell<T>,
+    lock: AtomicBool,
 }
 
 fn main_inner(mut info: MyBootInfo) {
@@ -162,6 +161,26 @@ fn main_inner(mut info: MyBootInfo) {
 
     writeln!(port, "\nDone\n").unwrap();
 }
+
+#[repr(C)]
+pub struct IdtEntry {
+    // The lower 16 bits of the ISR's address
+    isr_low: u16,
+    // The GDT segment selector that the CPU will load into CS before calling the ISR
+    kernel_cs: u16,
+    // The IST in the TSS that the CPU will load into RSP; set to zero for now
+    ist: u8,
+    // Type and attributes; see the IDT page
+    attributes: u8,
+    // The higher 16 bits of the lower 32 bits of the ISR's address
+    isr_mid: u16,
+    // The higher 32 bits of the ISR's address
+    isr_high: u32,
+    // Set to zero
+    reserved: u32,
+}
+
+// static IDT : [IdtEntry: 256] = [];
 
 /// This function is called on panic.
 #[panic_handler]
