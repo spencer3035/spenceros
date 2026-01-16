@@ -13,16 +13,16 @@ pub fn init_loggers(into: &mut MyBootInfo) {
 
 #[macro_export]
 macro_rules! print {
-    ($tt:tt) => {
-        write!($crate::loggers::DynamicLogger, $tt).unwrap()
+    ($($tt:tt)*) => {
+        write!($crate::loggers::DynamicLogger, $($tt)*).unwrap()
     };
 }
 pub use print;
 
 #[macro_export]
 macro_rules! println {
-    ($tt:tt) => {
-        $crate::loggers::print!($tt);
+    ($($tt:tt)*) => {
+        $crate::loggers::print!($($tt)*);
         $crate::loggers::print!("\n");
     };
 }
@@ -30,16 +30,16 @@ pub use println;
 
 #[macro_export]
 macro_rules! print_port {
-    ($tt:tt) => {
-        write!($crate::loggers::PortLogger, $tt).unwrap()
+    ($($tt:tt)*) => {
+        write!($crate::loggers::PortLogger, $($tt)*).unwrap()
     };
 }
 pub use print_port;
 
 #[macro_export]
 macro_rules! println_port {
-    ($tt:tt) => {
-        $crate::loggers::print_port!($tt);
+    ($($tt:tt)*) => {
+        $crate::loggers::print_port!($($tt)*);
         $crate::loggers::print_port!("\n");
     };
 }
@@ -47,16 +47,16 @@ pub use println_port;
 
 #[macro_export]
 macro_rules! print_framebuffer {
-    ($tt:tt) => {
-        write!($crate::loggers::FrameBufferDisplay, $tt).unwrap()
+    ($($tt:tt)*) => {
+        write!($crate::loggers::FrameBufferDisplay, $($tt)*).unwrap()
     };
 }
 pub use print_framebuffer;
 
 #[macro_export]
 macro_rules! println_framebuffer {
-    ($tt:tt) => {
-        $crate::loggers::print_framebuffer!($tt);
+    ($($tt:tt)*) => {
+        $crate::loggers::print_framebuffer!($($tt)*);
         $crate::loggers::print_framebuffer!("\n");
     };
 }

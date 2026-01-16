@@ -105,15 +105,15 @@ fn main_inner(mut info: MyBootInfo) {
     info.init_loggers();
     let mut kb = keyboard_ps_2::KeyboardDriver::new();
 
-    loggers::print!("test");
+    loggers::println!("test");
 
-    // writeln!(port, "Memory entries:").unwrap();
-    // for entry in info.mem_info.iter() {
-    //     writeln!(port, "{entry:X?}").unwrap();
-    // }
-    // writeln!(port, "kernel addr: 0x{:X}", info.kernel_addr).unwrap();
+    println!("Memory entries:");
+    for entry in info.mem_info.iter() {
+        println!("{entry:X?}");
+    }
+    println!("kernel addr: 0x{:X}", info.kernel_addr);
 
-    // writeln!(fb, "Press any key to continue:").unwrap();
+    println!("Press any key to continue:");
     let _ = kb.next_keypress();
 
     // loop {
