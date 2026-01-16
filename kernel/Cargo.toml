@@ -9,3 +9,4 @@ uart_16550 = "0.4.0"
 x86_64 = "0.15.4"
 proc_macros = { path = "../bootloader/proc_macros/" } 
 derive_more = { version = "2.1.1", features = ["add", "add_assign", "mul", "mul_assign"], default-features = false }
+conquer-once = { version = "0.4.0", default-features = false }

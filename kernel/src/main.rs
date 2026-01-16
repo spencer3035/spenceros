@@ -5,9 +5,12 @@
 #![cfg_attr(not(test), no_main)]
 
 use bootloader_api::BootInfo;
-use core::{cell::UnsafeCell, fmt::Write, marker::PhantomData, sync::atomic::AtomicBool};
+use core::fmt::Write;
 
-use crate::framebuffer::{FrameBuffer, FrameBufferDisplay};
+use crate::{
+    framebuffer::{FrameBuffer, FrameBufferDisplay},
+    mutex::Mutex,
+};
 
 pub mod alloc;
 pub mod font;
@@ -16,6 +19,9 @@ pub mod keyboard_ps_2;
 pub mod mem;
 pub mod mutex;
 pub mod prealloc_array;
+
+#[macro_use]
+pub mod loggers;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u32)]
@@ -44,12 +50,18 @@ pub fn serial() -> uart_16550::SerialPort {
 }
 
 #[allow(dead_code)]
-struct MyBootInfo {
+pub struct MyBootInfo {
     framebuffer: Option<FrameBufferDisplay>,
     port: Option<uart_16550::SerialPort>,
     kernel_addr: u64,
     kernel_len: u64,
     mem_info: mem::MemInfo,
+}
+
+impl MyBootInfo {
+    fn init_loggers(&mut self) {
+        loggers::init_loggers(self);
+    }
 }
 
 #[derive(Debug)]
@@ -90,17 +102,18 @@ fn kernel_main(boot_info: &'static mut BootInfo) -> ! {
 }
 
 fn main_inner(mut info: MyBootInfo) {
-    let mut fb = info.framebuffer.take().unwrap();
-    let mut port = info.port.take().unwrap();
+    info.init_loggers();
     let mut kb = keyboard_ps_2::KeyboardDriver::new();
 
-    writeln!(port, "Memory entries:").unwrap();
-    for entry in info.mem_info.iter() {
-        writeln!(port, "{entry:X?}").unwrap();
-    }
-    writeln!(port, "kernel addr: 0x{:X}", info.kernel_addr).unwrap();
+    loggers::print!("test");
 
-    writeln!(fb, "Press any key to continue:").unwrap();
+    // writeln!(port, "Memory entries:").unwrap();
+    // for entry in info.mem_info.iter() {
+    //     writeln!(port, "{entry:X?}").unwrap();
+    // }
+    // writeln!(port, "kernel addr: 0x{:X}", info.kernel_addr).unwrap();
+
+    // writeln!(fb, "Press any key to continue:").unwrap();
     let _ = kb.next_keypress();
 
     // loop {
@@ -120,7 +133,7 @@ fn main_inner(mut info: MyBootInfo) {
     //     }
     // }
 
-    writeln!(port, "\nDone\n").unwrap();
+    // writeln!(port, "\nDone\n").unwrap();
 }
 
 #[repr(C)]

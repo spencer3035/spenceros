@@ -16,7 +16,7 @@ const BUDDY_1_PAGES_PER_BIT: usize = 64;
 const BUDDY_2_SIZE: usize = 1 << 2;
 const BUDDY_2_PAGES_PER_BIT: usize = 64 * 64;
 
-struct Page<const SIZE: usize = PAGE_SIZE> {
+pub struct Page<const SIZE: usize = PAGE_SIZE> {
     addr: VirtualAddr,
 }
 
@@ -29,7 +29,7 @@ pub struct BuddyAllocator {
 impl BuddyAllocator {
     fn alloc(&mut self, layout: core::alloc::Layout) -> *mut u8 {
         let size_req = layout.pad_to_align().size();
-        let pages_needed = size_req.div_ceil(PAGE_SIZE);
+        let _pages_needed = size_req.div_ceil(PAGE_SIZE);
         let pages_for_align = layout.align().div_ceil(PAGE_SIZE);
         if pages_for_align <= BUDDY_0_PAGES_PER_BIT {
             // Use buddy 0
@@ -45,17 +45,17 @@ impl BuddyAllocator {
             core::ptr::null_mut()
         }
     }
-    fn dealloc(&mut self, ptr: *mut u8, layout: core::alloc::Layout) {
+    fn dealloc(&mut self, _ptr: *mut u8, _layout: core::alloc::Layout) {
         todo!()
     }
 }
 
 unsafe impl core::alloc::GlobalAlloc for BuddyAllocator {
-    unsafe fn alloc(&self, layout: core::alloc::Layout) -> *mut u8 {
+    unsafe fn alloc(&self, _layout: core::alloc::Layout) -> *mut u8 {
         todo!()
     }
 
-    unsafe fn dealloc(&self, ptr: *mut u8, layout: core::alloc::Layout) {
+    unsafe fn dealloc(&self, _ptr: *mut u8, _layout: core::alloc::Layout) {
         todo!()
     }
 }
@@ -113,12 +113,12 @@ impl<const N: usize, const P: usize> Buddy<N, P> {
     }
 
     /// Gets sets the correct pages to used
-    pub fn alloc_pages(&self, num_pages: usize, page_align: u32) -> Option<Page> {
+    pub fn alloc_pages(&self, _num_pages: usize, page_align: u32) -> Option<Page> {
         for mask in self.masks.iter() {
             if mask.count_zeros() < page_align {
                 continue;
             }
-            let mut offset = page_align;
+            let _offset = page_align;
             // while !mask & !(u64::MAX << (64 - offset)) {
             //     todo!()
             // }
