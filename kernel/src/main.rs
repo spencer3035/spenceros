@@ -17,6 +17,7 @@ use crate::{
 pub mod alloc;
 pub mod font;
 pub mod framebuffer;
+pub mod gdt;
 pub mod keyboard_ps_2;
 pub mod mem;
 pub mod mutex;
@@ -137,7 +138,7 @@ fn main_inner(mut info: MyBootInfo) {
         prev = Some(entry.end);
     }
 
-    println!("kernel addr: 0x{:X}", info.kernel_addr);
+    println!("GDT: {:#X?}", gdt::GDT);
 
     println!("Press any key to continue:");
     let _ = kb.next_keypress();
@@ -162,6 +163,21 @@ fn main_inner(mut info: MyBootInfo) {
     // writeln!(port, "\nDone\n").unwrap();
 }
 
+const IDT_SIZE: usize = 16;
+
+#[repr(C, packed)]
+pub struct IdtDescriptor {
+    size: u16,
+    offset: u64,
+}
+
+static IDT_DESCRIPTOR: IdtDescriptor = IdtDescriptor {
+    size: IDT_SIZE as u16,
+    offset: 0,
+};
+
+static IDT: [IdtEntry; IDT_SIZE] = [const { IdtEntry::null() }; IDT_SIZE];
+
 #[repr(C)]
 pub struct IdtEntry {
     // The lower 16 bits of the ISR's address
@@ -178,6 +194,20 @@ pub struct IdtEntry {
     isr_high: u32,
     // Set to zero
     reserved: u32,
+}
+
+impl IdtEntry {
+    const fn null() -> Self {
+        Self {
+            isr_low: 0,
+            kernel_cs: 0,
+            ist: 0,
+            attributes: 0,
+            isr_mid: 0,
+            isr_high: 0,
+            reserved: 0,
+        }
+    }
 }
 
 // static IDT : [IdtEntry: 256] = [];
